@@ -1,16 +1,16 @@
-// POST /api/interview: returns the next intake question for a patient.
-// The route is stateless: the client sends the whole interview on every call,
-// so the red flag scanner re-checks every patient message each time.
-import { loadHistory } from './db.js';
+// The intake interview: picks the next question with Gemini, after the red flag scanner
+// has re-checked every patient message. Used by the patient routes in visits.js.
 import { buildInterviewPrompt } from '../lib/interviewPrompt.ts';
 import { getComplaintFlags, scanForRedFlags } from '../lib/redFlags.ts';
 
 export const MAX_QUESTIONS = 8;
+// Below this many questions, a "done" from the AI gets one nudge to check the red flags first.
+export const MIN_QUESTIONS = 4;
 export const TRIAGE_MESSAGE = 'Please go to the triage desk now.';
 
 const MAX_TEXT = 2000;
 const MAX_ITEMS = 30;
-const GEMINI_ATTEMPTS = 2;
+const GEMINI_ATTEMPTS = 3;
 const GEMINI_TIMEOUT_MS = 15000;
 
 const RESPONSE_SCHEMA = {
@@ -41,13 +41,13 @@ function parseQaList(value) {
   return valid ? items : null;
 }
 
-/** Returns { complaint, premadeAnswers, transcript, demoPatientId }, or null if the body is invalid. */
+/** Returns { complaint, premadeAnswers, transcript }, or null if the body is invalid. */
 export function parseInterviewRequest(body) {
   const complaint = typeof body?.complaint === 'string' ? body.complaint.trim() : '';
   const premadeAnswers = parseQaList(body?.premadeAnswers);
   const transcript = parseQaList(body?.transcript);
   if (!complaint || complaint.length > MAX_TEXT || !premadeAnswers || !transcript) return null;
-  return { complaint, premadeAnswers, transcript, demoPatientId: body?.demoPatientId };
+  return { complaint, premadeAnswers, transcript };
 }
 
 /** Checks Gemini's reply. Returns a clean AiQuestion, or null if it can't be used. */
@@ -80,7 +80,7 @@ export function conversationText({ complaint, transcript }, finalTurn = false) {
 async function callGemini(systemPrompt, userText, responseSchema) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('Missing env var GEMINI_API_KEY');
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -96,9 +96,15 @@ async function callGemini(systemPrompt, userText, responseSchema) {
   return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
 }
 
-/** Calls Gemini with one retry. Returns parse(reply), or null if every attempt failed. */
+/**
+ * Calls Gemini, retrying with a growing wait (1.5s, then 3s). The free tier often answers
+ * 429 (rate limit) or 503 (overloaded) for a moment, and an instant retry just fails again.
+ * Returns parse(reply), or null if every attempt failed.
+ */
 export async function askGemini(systemPrompt, userText, responseSchema, parse) {
+  const baseDelay = Number(process.env.GEMINI_RETRY_BASE_MS ?? 1500);
   for (let attempt = 1; attempt <= GEMINI_ATTEMPTS; attempt++) {
+    if (attempt > 1 && baseDelay > 0) await new Promise((r) => setTimeout(r, baseDelay * 2 ** (attempt - 2)));
     try {
       const result = parse(await callGemini(systemPrompt, userText, responseSchema));
       if (result) return result;
@@ -128,33 +134,24 @@ export async function runInterviewTurn(input) {
 
   const finalTurn = transcript.length >= MAX_QUESTIONS;
   const systemPrompt = buildInterviewPrompt({
+    complaint,
     maxQuestions: MAX_QUESTIONS,
     complaintFlags: getComplaintFlags(complaint),
     history,
     premadeAnswers,
   });
-  const ai = await askGemini(systemPrompt, conversationText(input, finalTurn), RESPONSE_SCHEMA, parseAiQuestion);
+  let ai = await askGemini(systemPrompt, conversationText(input, finalTurn), RESPONSE_SCHEMA, parseAiQuestion);
+
+  // Lighter models sometimes stop after 2 questions without ruling out the red flags.
+  // Before the minimum, ask once more; if it still says done, accept it.
+  if (ai?.done && transcript.length < MIN_QUESTIONS) {
+    const nudge = `${conversationText(input)}\nYou have only asked ${transcript.length} questions. Before finishing, ask about any global or complaint-specific red flag that has not been clearly ruled out. Only set done if every one is already covered.`;
+    ai = (await askGemini(systemPrompt, nudge, RESPONSE_SCHEMA, parseAiQuestion)) ?? ai;
+  }
 
   // Without the AI nobody is checking for red flags, so a person has to take over.
   if (!ai) return { ...emptyResult(), escalate: true, escalateReason: 'Interview unavailable: AI did not respond' };
   if (ai.escalate) return { ...ai, escalateReason: ai.escalateReason || 'AI escalated without a reason' };
   if (finalTurn) return { ...emptyResult(), done: true };
   return ai;
-}
-
-/** Express handler. Staff-only escalation reasons are removed before the reply. */
-export async function interviewHandler(req, res, next) {
-  try {
-    const input = parseInterviewRequest(req.body);
-    if (!input) return res.status(400).json({ code: 'bad_request', message: 'The interview data was not valid.' });
-
-    const history = await loadHistory(input.demoPatientId, req.userId);
-    const result = await runInterviewTurn({ ...input, history });
-    if (!result.escalate) return res.json(result);
-
-    // TODO(storage): save result.escalateReason on the case so staff can see it.
-    res.json({ ...result, escalateReason: '', patientMessage: TRIAGE_MESSAGE });
-  } catch (err) {
-    next(err);
-  }
 }

@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { scanForRedFlags } from '../lib/redFlags.ts';
-import { TRIAGE_MESSAGE } from './interview.js';
-import { parseTriageResult, runSummary, summaryHandler } from './summary.js';
+import { parseTriageResult, runSummary } from './summary.js';
 
-const soap = { subjective: 's', objective: 'o', assessment: 'a', plan: 'p' };
+const soap = { subjective: 's', assessment: 'a', plan: 'p' };
 const minor = { escalate: false, redFlags: [], suggestedCtas: 5, soap };
 const parse = (value) => parseTriageResult(JSON.stringify(value));
 
@@ -36,6 +35,7 @@ describe('runSummary', () => {
   beforeEach(() => {
     calls = 0;
     process.env.GEMINI_API_KEY = 'test';
+    process.env.GEMINI_RETRY_BASE_MS = '0';
   });
   afterEach(() => {
     globalThis.fetch = realFetch;
@@ -52,15 +52,10 @@ describe('runSummary', () => {
     assert.deepEqual(result.redFlags, ['Stiff neck']);
     assert.equal(calls, 0);
   });
-  it('escalates if Gemini keeps failing', async () => {
+  it('escalates if Gemini fails all 3 attempts', async () => {
     stub(new Error('down'));
     assert.equal((await runSummary(input)).escalate, true);
-    assert.equal(calls, 2);
-  });
-  it('shows an escalated patient only the triage message', async () => {
-    let sent;
-    await summaryHandler({ body: { complaint: 'I have chest pain' } }, { json: (b) => (sent = b) }, assert.fail);
-    assert.deepEqual(sent, { escalate: true, patientMessage: TRIAGE_MESSAGE });
+    assert.equal(calls, 3);
   });
 });
 

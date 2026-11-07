@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { formatHistoryForPrompt, DEMO_PATIENTS } from '../lib/history.ts';
 import { getComplaintFlags, scanForRedFlags } from '../lib/redFlags.ts';
-import { interviewHandler, MAX_QUESTIONS, parseAiQuestion, runInterviewTurn, TRIAGE_MESSAGE } from './interview.js';
+import { MAX_QUESTIONS, MIN_QUESTIONS, parseAiQuestion, runInterviewTurn } from './interview.js';
 
 const labels = (text) => scanForRedFlags(text).map((h) => h.label);
 const question = { question: 'Where does it hurt?', options: ['Left', 'Right'], allowOther: true, done: false, escalate: false, escalateReason: '' };
@@ -78,6 +78,7 @@ describe('runInterviewTurn', () => {
   beforeEach(() => {
     calls = 0;
     process.env.GEMINI_API_KEY = 'test';
+    process.env.GEMINI_RETRY_BASE_MS = '0';
   });
   afterEach(() => {
     globalThis.fetch = realFetch;
@@ -98,10 +99,10 @@ describe('runInterviewTurn', () => {
     assert.equal((await runInterviewTurn(input())).question, question.question);
     assert.equal(calls, 2);
   });
-  it('escalates if Gemini keeps failing', async () => {
+  it('escalates if Gemini fails all 3 attempts', async () => {
     stub(new Error('down'));
     assert.equal((await runInterviewTurn(input())).escalate, true);
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
   });
   it('stops at the question limit but still lets the AI escalate', async () => {
     const transcript = Array.from({ length: MAX_QUESTIONS }, () => ({ question: 'q', answer: 'a' }));
@@ -111,10 +112,20 @@ describe('runInterviewTurn', () => {
     stub({ ...question, question: '', escalate: true, escalateReason: 'not minor' });
     assert.equal((await runInterviewTurn(input({ transcript }))).escalate, true);
   });
-  it('hides the staff reason from the patient', async () => {
-    let sent;
-    await interviewHandler({ body: { complaint: 'I have chest pain' } }, { json: (b) => (sent = b) }, assert.fail);
-    assert.equal(sent.escalateReason, '');
-    assert.equal(sent.patientMessage, TRIAGE_MESSAGE);
+  const doneReply = { ...question, question: '', options: [], done: true };
+  it('nudges an early "done" to check red flags first', async () => {
+    stub(doneReply, { ...question, question: 'Is your voice muffled?' });
+    assert.equal((await runInterviewTurn(input())).question, 'Is your voice muffled?');
+    assert.equal(calls, 2);
+  });
+  it('accepts "done" if the AI says so again after the nudge', async () => {
+    stub(doneReply, doneReply);
+    assert.equal((await runInterviewTurn(input())).done, true);
+  });
+  it('does not nudge once the minimum is reached', async () => {
+    const transcript = Array.from({ length: MIN_QUESTIONS }, () => ({ question: 'q', answer: 'a' }));
+    stub(doneReply);
+    assert.equal((await runInterviewTurn(input({ transcript }))).done, true);
+    assert.equal(calls, 1);
   });
 });

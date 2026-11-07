@@ -1,16 +1,15 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { DEMO_PATIENTS } from '../lib/history.ts';
-import { loadHistory, toPatientView } from './db.js';
+import { loadPatientHistory, toPatientView } from './db.js';
 
-describe('loadHistory without a database', () => {
+describe('loadPatientHistory without a database', () => {
   before(() => {
     delete process.env.DATABASE_URL;
   });
 
-  it('falls back to a demo patient', async () => assert.equal(await loadHistory('demo-maya'), DEMO_PATIENTS['demo-maya']));
-  it('ignores ids that are not demo ids', async () => assert.equal(await loadHistory('someone-else', undefined), null));
-  it('returns null for an unknown user', async () => assert.equal(await loadHistory(undefined, 'auth0|123'), null));
+  it('falls back to a demo patient', async () => assert.equal(await loadPatientHistory('demo-maya'), DEMO_PATIENTS['demo-maya']));
+  it('returns null for an unknown patient', async () => assert.equal(await loadPatientHistory('p_unknown'), null));
 });
 
 describe('toPatientView', () => {
@@ -30,7 +29,7 @@ describe('toPatientView', () => {
     confirmedCtas: 4,
     ctasOverrideReason: 'Looked worse',
     redFlags: ['Something scary'],
-    soap: { subjective: 'SECRET-SOAP', objective: '', assessment: '', plan: '' },
+    soap: { subjective: 'SECRET-SOAP', assessment: '', plan: '' },
     messages: [],
     prescriptions: [],
     orders: [],

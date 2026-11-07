@@ -1,28 +1,36 @@
-import type { DoctorNote, PastVisit, QueueItem, VisitRecord } from '../../lib/types.ts';
+import type { DoctorNote, PatientHistory, QueueItem, VisitRecord } from '../../lib/types.ts';
 
+/** GET /api/doctor/visits/:id (see docs/API.md). Opening it also marks it read for the doctor. */
 export interface DoctorVisitDetail {
   visit: VisitRecord;
-  patient: {
-    id: string;
-    /** Verified name from the health card, if the patient has one on file. */
-    name: string | null;
-    allergies: string[];
-    currentMeds: string[];
-    conditions: string[];
-    pastVisits: PastVisit[];
-  };
   notes: DoctorNote[];
-  unreadForDoctor: number;
+  history: PatientHistory | null;
+}
+
+/** GET /api/doctor/appointments */
+export interface AppointmentItem {
+  visitId: number;
+  patientId: string;
+  complaint: string;
+  status: 'offered' | 'booked';
+  location: string;
+  doctorName: string;
+  /** The booked time, or the earliest offered time while the patient hasn't picked yet. */
+  time: string | null;
 }
 
 export type { QueueItem };
 
 /** Calls one of our /api routes with the user's token. Throws the server's message on failure. */
-export async function callApi<T>(getToken: () => Promise<string>, path: string, method: 'GET' | 'POST' = 'GET'): Promise<T> {
-  const res = await fetch(`/api${path}`, { method, headers: { Authorization: `Bearer ${await getToken()}` } });
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.message ?? `Server error (${res.status})`);
-  return body as T;
+export async function callApi<T>(getToken: () => Promise<string>, path: string, body?: object): Promise<T> {
+  const res = await fetch(`/api${path}`, {
+    method: body ? 'POST' : 'GET',
+    headers: { Authorization: `Bearer ${await getToken()}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const reply = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(reply?.message ?? `Server error (${res.status})`);
+  return reply as T;
 }
 
 /** Canadian Triage and Acuity Scale: 1 is most urgent. */
@@ -35,9 +43,10 @@ export const CTAS_LABELS: Record<number, string> = {
 };
 
 export const STATUS_LABELS: Record<string, string> = {
-  interviewing: 'Patient still answering',
+  interviewing: 'Patient still answering the AI',
   waiting_for_doctor: 'Waiting for a doctor',
-  doctor_asked: 'Waiting on patient reply',
+  appointment_offered: 'Appointment times offered',
+  appointment_booked: 'Appointment booked',
   resolved: 'Resolved',
   escalated: 'Sent to triage desk',
 };
@@ -49,3 +58,5 @@ export function formatWait(minutes: number): string {
   const m = minutes % 60;
   return m ? `${h} h ${m} min` : `${h} h`;
 }
+
+export const formatTime = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : '');

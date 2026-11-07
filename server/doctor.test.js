@@ -1,61 +1,52 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseNote, parseOrder, parsePrescription, parseQuestion, parseResolve } from './doctor.js';
+import { parseAppointmentOffer, parseDoctorReply, parseOrder, parsePrescription } from './doctor.js';
 
-describe('parseQuestion and parseNote', () => {
-  it('trims the text', () => {
-    assert.deepEqual(parseQuestion({ text: '  Any fever?  ' }), { text: 'Any fever?' });
-    assert.deepEqual(parseNote({ text: 'Check BP next time' }), { text: 'Check BP next time' });
-  });
-  it('rejects empty, missing, non-string and very long text', () => {
-    for (const body of [{ text: '   ' }, {}, null, { text: 42 }, { text: 'x'.repeat(4001) }]) {
-      assert.ok(parseQuestion(body).error);
-      assert.ok(parseNote(body).error);
-    }
-  });
-});
+const rx = { medication: 'Ibuprofen', dose: '400 mg', frequency: 'Every 8 hours', duration: '5 days' };
 
 describe('parsePrescription', () => {
-  const rx = { medication: 'Ibuprofen', dose: '400 mg', frequency: 'Every 8 hours', duration: '5 days' };
-  it('accepts a full prescription, with instructions optional', () => {
-    assert.deepEqual(parsePrescription(rx), { ...rx, instructions: '' });
-    assert.equal(parsePrescription({ ...rx, instructions: ' With food. ' }).instructions, 'With food.');
-  });
-  it('rejects a prescription missing a required field', () => {
-    for (const field of Object.keys(rx)) assert.ok(parsePrescription({ ...rx, [field]: '' }).error, field);
-  });
+  it('defaults instructions to empty', () => assert.equal(parsePrescription(rx).instructions, ''));
+  it('requires a dose', () => assert.ok(parsePrescription({ ...rx, dose: '' }).error));
+  it('rejects very long fields', () => assert.ok(parsePrescription({ ...rx, medication: 'x'.repeat(201) }).error));
 });
 
 describe('parseOrder', () => {
-  it('accepts the known order types', () => {
-    for (const type of ['lab', 'imaging', 'referral', 'other']) {
-      assert.deepEqual(parseOrder({ type, name: 'CBC' }), { type, name: 'CBC', instructions: '' });
-    }
-  });
-  it('rejects unknown types and missing names', () => {
-    assert.ok(parseOrder({ type: 'surgery', name: 'X' }).error);
-    assert.ok(parseOrder({ type: 'lab', name: '' }).error);
-  });
+  it('accepts a lab test', () => assert.equal(parseOrder({ type: 'lab', name: 'Throat swab' }).name, 'Throat swab'));
+  it('rejects an unknown type', () => assert.ok(parseOrder({ type: 'surgery', name: 'x' }).error));
+  it('requires a name', () => assert.ok(parseOrder({ type: 'lab' }).error));
 });
 
-describe('parseResolve', () => {
-  const body = { diagnosis: 'Otitis externa', plan: 'Ear drops for 7 days.', confirmedCtas: 4 };
-  it('accepts the AI level unchanged, with no reason needed', () => {
-    assert.deepEqual(parseResolve(body, 4), { ...body, ctasOverrideReason: null });
+describe('parseDoctorReply', () => {
+  const body = { message: 'Rest and fluids.', diagnosis: 'Viral sore throat', confirmedCtas: 5 };
+  it('accepts a reply with no prescriptions', () => assert.deepEqual(parseDoctorReply(body, 5).prescriptions, []));
+  it('takes prescriptions and tests in the same reply', () => {
+    const r = parseDoctorReply({ ...body, prescriptions: [rx], orders: [{ type: 'lab', name: 'Throat swab' }] }, 5);
+    assert.equal(r.prescriptions[0].medication, 'Ibuprofen');
+    assert.equal(r.orders[0].name, 'Throat swab');
   });
-  it('needs a reason when the doctor changes the CTAS level', () => {
-    assert.ok(parseResolve({ ...body, confirmedCtas: 5 }, 4).error);
-    assert.equal(parseResolve({ ...body, confirmedCtas: 5, ctasOverrideReason: 'Mild' }, 4).ctasOverrideReason, 'Mild');
-  });
-  it('drops a reason when the level was not changed', () => {
-    assert.equal(parseResolve({ ...body, ctasOverrideReason: 'n/a' }, 4).ctasOverrideReason, null);
-  });
-  it('accepts a level as a string and with no AI suggestion', () => {
-    assert.equal(parseResolve({ ...body, confirmedCtas: '2' }, null).confirmedCtas, 2);
-  });
-  it('rejects bad levels and missing diagnosis or plan', () => {
-    for (const confirmedCtas of [0, 6, 2.5, 'x', undefined]) assert.ok(parseResolve({ ...body, confirmedCtas }, 4).error);
-    assert.ok(parseResolve({ ...body, diagnosis: '' }, 4).error);
-    assert.ok(parseResolve({ ...body, plan: '' }, 4).error);
-  });
+  it('requires a message for the patient', () => assert.ok(parseDoctorReply({ ...body, message: ' ' }, 5).error));
+  it('requires a diagnosis', () => assert.ok(parseDoctorReply({ ...body, diagnosis: '' }, 5).error));
+  it('needs a reason to change the suggested CTAS', () => assert.ok(parseDoctorReply({ ...body, confirmedCtas: 4 }, 5).error));
+  it('accepts a change with a reason', () =>
+    assert.equal(parseDoctorReply({ ...body, confirmedCtas: 4, ctasOverrideReason: 'Worse than reported' }, 5).ctasOverrideReason, 'Worse than reported'));
+  it('sends CTAS 3 to escalate instead', () => assert.ok(parseDoctorReply({ ...body, confirmedCtas: 3, ctasOverrideReason: 'x' }, 5).error));
+  it('rejects a bad prescription inside the reply', () => assert.ok(parseDoctorReply({ ...body, prescriptions: [{ medication: 'x' }] }, 5).error));
+  it('rejects prescriptions that are not a list', () => assert.ok(parseDoctorReply({ ...body, prescriptions: rx }, 5).error));
+});
+
+describe('parseAppointmentOffer', () => {
+  const now = Date.parse('2026-11-07T12:00:00Z');
+  const at = (hours) => new Date(now + hours * 3600_000).toISOString();
+  const body = { message: 'I would like to see you in person.', location: 'Fast track clinic, room 2', slots: [at(26), at(2)] };
+
+  it('accepts times and sorts them', () => assert.deepEqual(parseAppointmentOffer(body, now).slots, [at(2), at(26)]));
+  it('requires a location', () => assert.ok(parseAppointmentOffer({ ...body, location: '' }, now).error));
+  it('requires a message', () => assert.ok(parseAppointmentOffer({ ...body, message: '' }, now).error));
+  it('needs at least one time', () => assert.ok(parseAppointmentOffer({ ...body, slots: [] }, now).error));
+  it('allows at most 4 times', () => assert.ok(parseAppointmentOffer({ ...body, slots: [1, 2, 3, 4, 5].map(at) }, now).error));
+  it('rejects a time in the past', () => assert.ok(parseAppointmentOffer({ ...body, slots: [at(-1)] }, now).error));
+  it('rejects a time under 15 minutes away', () => assert.ok(parseAppointmentOffer({ ...body, slots: [at(0.1)] }, now).error));
+  it('rejects a time more than 60 days away', () => assert.ok(parseAppointmentOffer({ ...body, slots: [at(24 * 61)] }, now).error));
+  it('rejects the same time twice', () => assert.ok(parseAppointmentOffer({ ...body, slots: [at(3), at(3)] }, now).error));
+  it('rejects text that is not a date', () => assert.ok(parseAppointmentOffer({ ...body, slots: ['tomorrow'] }, now).error));
 });

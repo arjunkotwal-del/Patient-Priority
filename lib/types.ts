@@ -30,21 +30,32 @@ export interface TriageResult {
   escalate: boolean;
   redFlags: string[];
   suggestedCtas: 3 | 4 | 5;
-  soap: { subjective: string; objective: string; assessment: string; plan: string };
+  /** Summary note for the doctor. No objective section: there is no exam, so it is all self-reported. */
+  soap: { subjective: string; assessment: string; plan: string };
 }
 
 export interface Message {
   /** "ai" is the intake interviewer. */
   from: 'patient' | 'ai' | 'doctor';
   text: string;
-  kind: 'question' | 'answer' | 'plan';
+  kind: 'question' | 'answer' | 'plan' | 'appointment';
   /** ISO timestamp, set by the database. */
   sentAt?: string;
   /** Tappable answers, only on AI questions. */
   options?: string[] | null;
 }
 
-export type CaseStatus = 'interviewing' | 'waiting_for_doctor' | 'doctor_asked' | 'resolved' | 'escalated';
+// No doctor-patient chat: the doctor replies once (resolved), or offers in-person times.
+export type CaseStatus = 'interviewing' | 'waiting_for_doctor' | 'appointment_offered' | 'appointment_booked' | 'resolved' | 'escalated';
+
+/** In-person appointment: the doctor offers 1 to 4 times, the patient picks one. */
+export interface Appointment {
+  location: string;
+  status: 'offered' | 'booked';
+  bookedAt: string | null;
+  doctorName: string;
+  slots: { id: number; startsAt: string; chosen: boolean }[];
+}
 
 export interface Prescription {
   medication: string;
@@ -70,7 +81,7 @@ export interface QueueItem {
   visitId: number;
   patientId: string;
   complaint: string;
-  status: 'waiting_for_doctor' | 'doctor_asked';
+  status: 'waiting_for_doctor';
   suggestedCtas: number | null;
   startedAt: string;
   waitingMinutes: number;
@@ -91,6 +102,7 @@ export interface PatientVisitView {
   messages: Message[];
   prescriptions: Prescription[];
   orders: Order[];
+  appointment: Appointment | null;
   unreadCount: number;
 }
 
@@ -123,6 +135,7 @@ export interface VisitRecord {
   messages: Message[];
   prescriptions: Prescription[];
   orders: Order[];
+  appointment: Appointment | null;
 }
 
 export interface QuestionAnswer {

@@ -1,262 +1,243 @@
-// Doctor routes. Someone is a doctor only if their Auth0 login is linked to a row in the
-// doctors table, and only `npm run db:setup` writes that link, so nobody can make
-// themselves a doctor through the app.
+// Doctor routes. There is no back-and-forth chat: after reading the case, the doctor
+// either sends ONE reply (like an email, with any prescriptions and tests), or offers
+// in-person appointment times for the patient to pick from. Every route needs a doctor
+// login, and every open or change is written to the access log.
 //
-//   GET  /api/doctor/me              { doctor: { id, name } } or { doctor: null }
-//   GET  /api/doctor/queue           open patient requests, most urgent first
-//   GET  /api/doctor/visits/:id      one request in full: symptoms, check-in answers,
-//                                    AI summary, chat, patient history, private notes
-//   POST /api/doctor/visits/:id/read mark the patient's messages as read
-//
-// Actions on an open case. The first one claims the case for this doctor, and a case
-// another doctor has claimed can't be changed (409).
-//   POST /api/doctor/visits/:id/claim          take the case
-//   POST /api/doctor/visits/:id/questions      { text } ask the patient something
-//   POST /api/doctor/visits/:id/prescriptions  { medication, dose, frequency, duration, instructions? }
-//   POST /api/doctor/visits/:id/orders         { type, name, instructions? }
-//   POST /api/doctor/visits/:id/resolve        { diagnosis, plan, confirmedCtas, ctasOverrideReason? }
-// Private notes can be added to any visit, open or closed:
-//   POST /api/doctor/visits/:id/notes          { text }
+//   GET  /api/doctor/me                      { doctor: { id, name } } or { doctor: null }: which side of the app to show
+//   GET  /api/doctor/queue                   cases waiting for an answer, most urgent first
+//   GET  /api/doctor/appointments            in-person appointments offered or booked
+//   POST /api/doctor/visits/:id/claim        take a case
+//   GET  /api/doctor/visits/:id              full case: chat, summary, history, notes
+//   POST /api/doctor/visits/:id/reply        the one reply: message, diagnosis, prescriptions, tests
+//   POST /api/doctor/visits/:id/appointment  offer in-person appointment times
+//   POST /api/doctor/visits/:id/notes        private note (never shown to the patient)
+//   POST /api/doctor/visits/:id/escalate     send the patient to the triage desk
 import express from 'express';
-import { getAppMetadata } from './auth0.js';
 import { requireDoctor, requireVisit } from './access.js';
 import * as db from './db.js';
+import { notifyVisit } from './events.js';
 
-const MAX_SHORT = 200;
-const MAX_LONG = 4000;
-const ORDER_TYPES = ['lab', 'imaging', 'referral', 'other'];
-const OPEN_STATUSES = ['waiting_for_doctor', 'doctor_asked'];
+const ORDER_TYPES = new Set(['lab', 'imaging', 'referral', 'other']);
+const MAX_ITEMS = 10;
+const MAX_SLOTS = 4;
+const MIN_LEAD_MS = 15 * 60 * 1000;
+const MAX_AHEAD_MS = 60 * 24 * 60 * 60 * 1000;
 
-/** A trimmed string from the request body, or null if missing, empty or too long. */
-function text(body, field, max, { optional = false } = {}) {
-  const value = typeof body?.[field] === 'string' ? body[field].trim() : '';
-  if (!value) return optional ? '' : null;
-  return value.length <= max ? value : null;
+/** A required string field, trimmed. Null if missing, empty or too long. */
+function text(value, max = 2000) {
+  const s = typeof value === 'string' ? value.trim() : '';
+  return s && s.length <= max ? s : null;
+}
+/** An optional string field. Empty string if missing, null if too long. */
+function optionalText(value, max = 2000) {
+  if (value === undefined || value === null || value === '') return '';
+  return text(value, max);
 }
 
-/** Each parser returns clean input, or { error } with a message for the doctor. */
-export function parseQuestion(body) {
-  const value = text(body, 'text', MAX_LONG);
-  return value ? { text: value } : { error: 'Type a question for the patient.' };
-}
-
-export function parseNote(body) {
-  const value = text(body, 'text', MAX_LONG);
-  return value ? { text: value } : { error: 'Type a note first.' };
-}
+// ---- Validators: each returns the clean value, or { error } ----
 
 export function parsePrescription(body) {
   const rx = {
-    medication: text(body, 'medication', MAX_SHORT),
-    dose: text(body, 'dose', MAX_SHORT),
-    frequency: text(body, 'frequency', MAX_SHORT),
-    duration: text(body, 'duration', MAX_SHORT),
-    instructions: text(body, 'instructions', MAX_LONG, { optional: true }),
+    medication: text(body?.medication, 200),
+    dose: text(body?.dose, 200),
+    frequency: text(body?.frequency, 200),
+    duration: text(body?.duration, 200),
+    instructions: optionalText(body?.instructions, 1000),
   };
-  if (Object.values(rx).some((v) => v === null)) return { error: 'Fill in medication, dose, frequency and duration.' };
+  if (Object.values(rx).some((v) => v === null)) return { error: 'Each prescription needs medication, dose, frequency and duration.' };
   return rx;
 }
 
 export function parseOrder(body) {
-  const type = ORDER_TYPES.includes(body?.type) ? body.type : null;
-  const name = text(body, 'name', MAX_SHORT);
-  const instructions = text(body, 'instructions', MAX_LONG, { optional: true });
-  if (!type || !name || instructions === null) return { error: 'Choose a type and name the test or referral.' };
-  return { type, name, instructions };
+  if (!ORDER_TYPES.has(body?.type)) return { error: 'Each test type must be lab, imaging, referral or other.' };
+  const name = text(body?.name, 200);
+  const instructions = optionalText(body?.instructions, 1000);
+  if (!name || instructions === null) return { error: 'Name each test or referral.' };
+  return { type: body.type, name, instructions };
 }
 
-/** Closing a case. Changing the AI's CTAS level needs a reason, so the change can be reviewed. */
-export function parseResolve(body, suggestedCtas) {
-  const diagnosis = text(body, 'diagnosis', MAX_SHORT);
-  const plan = text(body, 'plan', MAX_LONG);
-  const confirmedCtas = Number(body?.confirmedCtas);
-  if (!diagnosis || !plan) return { error: 'Enter a diagnosis and a plan for the patient.' };
-  if (!Number.isInteger(confirmedCtas) || confirmedCtas < 1 || confirmedCtas > 5) return { error: 'Choose a CTAS level from 1 to 5.' };
-  const changed = suggestedCtas != null && confirmedCtas !== suggestedCtas;
-  const reason = text(body, 'ctasOverrideReason', MAX_LONG, { optional: true });
-  if (reason === null || (changed && !reason)) return { error: 'Say why you changed the CTAS level.' };
-  return { diagnosis, plan, confirmedCtas, ctasOverrideReason: changed ? reason : null };
+function parseList(value, parseItem, label) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAX_ITEMS) return { error: `${label} must be a list of at most ${MAX_ITEMS}.` };
+  const items = value.map(parseItem);
+  return items.find((i) => i.error) ?? items;
 }
+
+/**
+ * The doctor's one reply. Confirming or changing the AI's suggested CTAS: a change needs
+ * a reason, and CTAS 1 to 3 is not minor, so it must go through escalate instead.
+ */
+export function parseDoctorReply(body, suggestedCtas) {
+  const message = text(body?.message, 5000);
+  const diagnosis = text(body?.diagnosis, 500);
+  const summary = optionalText(body?.summary);
+  const reason = optionalText(body?.ctasOverrideReason, 1000);
+  const ctas = body?.confirmedCtas;
+  if (!message) return { error: 'Write the message for the patient.' };
+  if (!diagnosis || summary === null || reason === null) return { error: 'A diagnosis is required.' };
+  if (ctas !== 4 && ctas !== 5) return { error: 'Confirm CTAS 4 or 5. For anything more urgent, escalate the case instead.' };
+  if (suggestedCtas && ctas !== suggestedCtas && !reason) return { error: 'Give a reason for changing the suggested CTAS.' };
+  const prescriptions = parseList(body?.prescriptions, parsePrescription, 'prescriptions');
+  if (prescriptions.error) return prescriptions;
+  const orders = parseList(body?.orders, parseOrder, 'orders');
+  if (orders.error) return orders;
+  return { message, diagnosis, summary, confirmedCtas: ctas, ctasOverrideReason: reason || null, prescriptions, orders };
+}
+
+/** In-person appointment offer: 1 to 4 future times (ISO strings) at one location. */
+export function parseAppointmentOffer(body, now = Date.now()) {
+  const message = text(body?.message, 5000);
+  const location = text(body?.location, 200);
+  if (!message) return { error: 'Write the message for the patient.' };
+  if (!location) return { error: 'Say where the appointment is.' };
+  if (!Array.isArray(body?.slots) || body.slots.length < 1 || body.slots.length > MAX_SLOTS) {
+    return { error: `Offer between 1 and ${MAX_SLOTS} times.` };
+  }
+  const times = body.slots.map((s) => (typeof s === 'string' ? Date.parse(s) : NaN));
+  if (times.some((t) => Number.isNaN(t))) return { error: 'Each time must be a date and time, like 2026-11-08T14:30:00-05:00.' };
+  if (times.some((t) => t < now + MIN_LEAD_MS || t > now + MAX_AHEAD_MS)) return { error: 'Times must be at least 15 minutes from now and within 60 days.' };
+  if (new Set(times).size !== times.length) return { error: 'Each time can only be offered once.' };
+  return { message, location, slots: times.sort((a, b) => a - b).map((t) => new Date(t).toISOString()) };
+}
+
+// ---- Helpers ----
+
+const fail = (res, status, code, message) => res.status(status).json({ code, message });
 
 const route = (fn) => async (req, res, next) => {
   try {
     await fn(req, res);
   } catch (err) {
-    if (err instanceof db.DatabaseUnavailableError) {
-      return res.status(503).json({ code: 'records_unavailable', message: 'Patient records are unavailable right now. Please try again soon.' });
-    }
+    if (err instanceof db.DatabaseUnavailableError) return fail(res, 503, 'records_unavailable', 'Patient records are unavailable right now.');
     next(err);
   }
 };
 
-/** The patient's verified name from their health card, or null if unknown. Never throws. */
-async function patientName(patientId) {
-  try {
-    const auth0Id = await db.getPatientAuth0Id(patientId);
-    if (!auth0Id) return null;
-    const legal = (await getAppMetadata(auth0Id)).health_card?.legal_name;
-    return legal ? `${legal.first} ${legal.last}` : null;
-  } catch (err) {
-    console.warn('Patient name unavailable:', err.message);
-    return null;
-  }
-}
+const WORKABLE = new Set(['waiting_for_doctor', 'appointment_offered', 'appointment_booked']);
 
 /**
- * Runs an action on an open case that this doctor holds, claiming it first if nobody has.
- * Answers 409 if the case is closed or another doctor has it.
+ * Loads a case this doctor may act on: it must be in one of `allowed` statuses, and either
+ * theirs or unclaimed (then they claim it). Sends the error and returns null otherwise.
  */
-async function withClaim(req, res, action) {
-  if (!(await db.claimVisit(req.visitId, req.doctor.id))) {
-    const visit = await db.getVisit(req.visitId);
-    const message = OPEN_STATUSES.includes(visit.status)
-      ? `${visit.assignedDoctor?.name ?? 'Another doctor'} is already handling this case.`
-      : 'This case is closed.';
-    return res.status(409).json({ code: 'not_yours', message });
+async function loadMyCase(req, res, allowed = WORKABLE) {
+  const visit = await db.getVisit(req.visitId);
+  if (!allowed.has(visit.status)) return fail(res, 409, 'wrong_status', `This case is ${visit.status.replaceAll('_', ' ')}.`), null;
+  if (!(await db.claimVisit(visit.id, req.doctor.id))) {
+    return fail(res, 409, 'claimed_by_other', `${visit.assignedDoctor?.name ?? 'Another doctor'} has this case.`), null;
   }
-  await action();
-  res.json({ ok: true });
+  return visit;
 }
 
-/** Wraps a parser: answers 400 with its message when the input is bad. */
-const parsed = (parse, req, res, ...extra) => {
-  const input = parse(req.body, ...extra);
-  if (input.error) {
-    res.status(400).json({ code: 'bad_request', message: input.error });
-    return null;
-  }
-  return input;
-};
+// ---- Routes ----
 
 export const doctorRouter = express.Router();
 const json = express.json({ limit: '100kb' });
+const doctorCase = [requireDoctor, requireVisit];
 
-// Not behind requireDoctor: everyone may ask, and the answer tells the app which side to show.
+// Not behind requireDoctor: anyone may ask, and the answer tells the app which side to show.
 doctorRouter.get(
   '/doctor/me',
-  route(async (req, res) => {
-    res.json({ doctor: await db.getDoctorByAuth0Id(req.userId) });
-  }),
+  route(async (req, res) => res.json({ doctor: await db.getDoctorByAuth0Id(req.userId) })),
 );
 
 doctorRouter.get(
   '/doctor/queue',
   requireDoctor,
-  route(async (_req, res) => {
-    res.json({ queue: await db.getQueue() });
+  route(async (_req, res) => res.json({ queue: await db.getQueue() })),
+);
+
+doctorRouter.get(
+  '/doctor/appointments',
+  requireDoctor,
+  route(async (_req, res) => res.json({ appointments: await db.listAppointments() })),
+);
+
+doctorRouter.post(
+  '/doctor/visits/:id/claim',
+  ...doctorCase,
+  route(async (req, res) => {
+    if (!(await loadMyCase(req, res))) return;
+    await db.logAccess(req.doctor.id, req.visitId, 'claimed');
+    await notifyVisit(req.visitId, 'status_changed', 'doctors');
+    res.json({ ok: true });
   }),
 );
 
 doctorRouter.get(
   '/doctor/visits/:id',
-  requireDoctor,
-  requireVisit,
+  ...doctorCase,
   route(async (req, res) => {
     const visit = await db.getVisit(req.visitId);
-    const [history, notes, name, unreadForDoctor] = await Promise.all([
-      db.loadPatientHistory(visit.patientId),
-      db.getDoctorNotes(req.visitId),
-      patientName(visit.patientId),
-      db.getUnreadCount(req.visitId, 'doctor'),
-    ]);
-    res.json({
-      visit,
-      patient: {
-        id: visit.patientId,
-        name,
-        allergies: history?.allergies ?? [],
-        currentMeds: history?.currentMeds ?? [],
-        conditions: history?.conditions ?? [],
-        pastVisits: history?.pastVisits ?? [],
-      },
-      notes,
-      unreadForDoctor,
-    });
+    const [notes, history] = await Promise.all([db.getDoctorNotes(req.visitId), db.getPatientHistory({ patientId: visit.patientId })]);
+    await Promise.all([db.logAccess(req.doctor.id, req.visitId, 'viewed'), db.markRead(req.visitId, 'doctor')]);
+    res.json({ visit, notes, history });
   }),
 );
 
+// The one reply. Also used after an in-person appointment to close the case.
 doctorRouter.post(
-  '/doctor/visits/:id/read',
-  requireDoctor,
-  requireVisit,
+  '/doctor/visits/:id/reply',
+  json,
+  ...doctorCase,
   route(async (req, res) => {
-    await db.markRead(req.visitId, 'doctor');
+    const visit = await loadMyCase(req, res, new Set(['waiting_for_doctor', 'appointment_booked']));
+    if (!visit) return;
+    const reply = parseDoctorReply(req.body, visit.suggestedCtas);
+    if (reply.error) return fail(res, 400, 'bad_request', reply.error);
+
+    // The history entry future interviews see. Falls back to the AI's subjective note.
+    const summary = reply.summary || visit.soap?.subjective || visit.complaint;
+    if (!(await db.sendDoctorReply(req.visitId, req.doctor.id, { ...reply, summary }))) {
+      return fail(res, 409, 'wrong_status', 'This case changed. Reload it and try again.');
+    }
+    await db.logAccess(req.doctor.id, req.visitId, 'replied');
+    await notifyVisit(req.visitId, 'doctor_reply');
     res.json({ ok: true });
   }),
 );
 
 doctorRouter.post(
-  '/doctor/visits/:id/claim',
-  requireDoctor,
-  requireVisit,
-  route(async (req, res) => withClaim(req, res, async () => {})),
-);
-
-doctorRouter.post(
-  '/doctor/visits/:id/questions',
+  '/doctor/visits/:id/appointment',
   json,
-  requireDoctor,
-  requireVisit,
+  ...doctorCase,
   route(async (req, res) => {
-    const input = parsed(parseQuestion, req, res);
-    if (!input) return;
-    await withClaim(req, res, async () => {
-      await db.addMessage(req.visitId, { from: 'doctor', kind: 'question', text: input.text });
-      await db.setVisitStatus(req.visitId, 'doctor_asked');
-    });
+    const offer = parseAppointmentOffer(req.body);
+    if (offer.error) return fail(res, 400, 'bad_request', offer.error);
+    if (!(await loadMyCase(req, res, new Set(['waiting_for_doctor'])))) return;
+    if (!(await db.offerAppointment(req.visitId, req.doctor.id, offer))) {
+      return fail(res, 409, 'wrong_status', 'This case changed. Reload it and try again.');
+    }
+    await db.logAccess(req.doctor.id, req.visitId, 'offered_appointment');
+    await notifyVisit(req.visitId, 'appointment_offered');
+    res.status(201).json({ ok: true });
   }),
 );
 
-doctorRouter.post(
-  '/doctor/visits/:id/prescriptions',
-  json,
-  requireDoctor,
-  requireVisit,
-  route(async (req, res) => {
-    const input = parsed(parsePrescription, req, res);
-    if (!input) return;
-    await withClaim(req, res, () => db.addPrescription(req.visitId, req.doctor.id, input));
-  }),
-);
-
-doctorRouter.post(
-  '/doctor/visits/:id/orders',
-  json,
-  requireDoctor,
-  requireVisit,
-  route(async (req, res) => {
-    const input = parsed(parseOrder, req, res);
-    if (!input) return;
-    await withClaim(req, res, () => db.addOrder(req.visitId, req.doctor.id, input));
-  }),
-);
-
-doctorRouter.post(
-  '/doctor/visits/:id/resolve',
-  json,
-  requireDoctor,
-  requireVisit,
-  route(async (req, res) => {
-    const visit = await db.getVisit(req.visitId);
-    const input = parsed(parseResolve, req, res, visit.suggestedCtas);
-    if (!input) return;
-    await withClaim(req, res, async () => {
-      // The plan goes to the patient as a chat message; the AI's assessment is kept as the clinical summary.
-      await db.addMessage(req.visitId, { from: 'doctor', kind: 'plan', text: input.plan });
-      await db.resolveVisit(req.visitId, { doctorId: req.doctor.id, summary: visit.soap?.assessment ?? input.diagnosis, ...input });
-    });
-  }),
-);
-
+// Notes can be added to any case, open or closed, by any doctor.
 doctorRouter.post(
   '/doctor/visits/:id/notes',
   json,
-  requireDoctor,
-  requireVisit,
+  ...doctorCase,
   route(async (req, res) => {
-    const input = parsed(parseNote, req, res);
-    if (!input) return;
-    await db.addDoctorNote(req.visitId, req.doctor.id, input.text);
+    const note = text(req.body?.text);
+    if (!note) return fail(res, 400, 'bad_request', 'Write a note first.');
+    await db.addDoctorNote(req.visitId, req.doctor.id, note);
+    await db.logAccess(req.doctor.id, req.visitId, 'noted');
+    res.status(201).json({ ok: true });
+  }),
+);
+
+doctorRouter.post(
+  '/doctor/visits/:id/escalate',
+  json,
+  ...doctorCase,
+  route(async (req, res) => {
+    const reason = text(req.body?.reason, 500);
+    if (!reason) return fail(res, 400, 'bad_request', 'Give a reason for escalating.');
+    if (!(await loadMyCase(req, res))) return;
+    await db.escalateVisit(req.visitId, [`Doctor: ${reason}`]);
+    await db.logAccess(req.doctor.id, req.visitId, 'escalated');
+    await notifyVisit(req.visitId, 'status_changed');
     res.json({ ok: true });
   }),
 );

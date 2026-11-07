@@ -65,21 +65,6 @@ export async function getPatientHistory({ patientId, auth0UserId }) {
   };
 }
 
-/**
- * Loads history for an interview. A demoPatientId (only ids starting with "demo-") picks
- * a fake patient; otherwise we look up the logged-in user. Never throws: if the database
- * is down, the interview carries on without history.
- */
-export async function loadHistory(demoPatientId, auth0UserId) {
-  const isDemo = typeof demoPatientId === 'string' && demoPatientId.startsWith('demo-');
-  try {
-    return await getPatientHistory(isDemo ? { patientId: demoPatientId } : { auth0UserId });
-  } catch (err) {
-    console.warn('History unavailable:', err.message);
-    return null;
-  }
-}
-
 // ---- Visits: one per case, with its full chat, doctor, diagnosis and prescriptions ----
 
 /** Thrown when DATABASE_URL isn't set, so routes can answer 503 instead of a generic error. */
@@ -115,10 +100,13 @@ export async function getOrCreatePatientId(auth0UserId) {
   return rows[0].id;
 }
 
-/** The Auth0 login linked to a patient, or null (demo patients usually have none). */
-export async function getPatientAuth0Id(patientId) {
-  const { rows } = await requirePool().query('SELECT auth0_user_id FROM patients WHERE id = $1', [patientId]);
-  return rows[0]?.auth0_user_id ?? null;
+/** Records that a doctor opened or changed a patient's record. action is e.g. "viewed" or "prescribed". */
+export async function logAccess(doctorId, visitId, action) {
+  await requirePool().query(
+    `INSERT INTO access_log (doctor_id, patient_id, visit_id, action)
+     SELECT $1, patient_id, id, $3 FROM past_visits WHERE id = $2`,
+    [doctorId, visitId, action],
+  );
 }
 
 /** Which patient a visit belongs to, or null if the visit doesn't exist. */
@@ -202,57 +190,161 @@ export async function saveTriage(visitId, { escalate, redFlags, suggestedCtas, s
   );
 }
 
-/** Changes the case status, e.g. to "doctor_asked" when the doctor sends a question. */
-export async function setVisitStatus(visitId, status) {
-  await requirePool().query('UPDATE past_visits SET status = $2 WHERE id = $1', [visitId, status]);
+/** Runs fn(client) in one transaction: either every change is saved, or none is. */
+async function inTransaction(fn) {
+  const client = await requirePool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
-/** Saves a prescription written by a doctor for this visit. */
-export async function addPrescription(visitId, doctorId, { medication, dose, frequency, duration, instructions = '' }) {
-  await requirePool().query(
-    `INSERT INTO prescriptions (visit_id, doctor_id, medication, dose, frequency, duration, instructions)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [visitId, doctorId, medication, dose, frequency, duration, instructions],
+// ---- The doctor's answer: one reply, or an in-person appointment offer ----
+
+/**
+ * The doctor's one reply, like an email: a message for the patient plus the diagnosis,
+ * prescriptions and tests. Closes the case. Works on a waiting case, or after the patient's
+ * in-person appointment. Returns false if the case isn't in one of those states.
+ */
+export async function sendDoctorReply(visitId, doctorId, reply) {
+  const { message, diagnosis, summary, confirmedCtas, ctasOverrideReason = null, prescriptions = [], orders = [] } = reply;
+  return inTransaction(async (c) => {
+    const { rowCount } = await c.query(
+      `UPDATE past_visits
+       SET status = 'resolved', doctor_id = $2, diagnosis = $3, summary = $4, plan = $5, confirmed_ctas = $6,
+           ctas_override_reason = $7, resolved_at = now()
+       WHERE id = $1 AND status IN ('waiting_for_doctor', 'appointment_booked')`,
+      [visitId, doctorId, diagnosis, summary, message, confirmedCtas, ctasOverrideReason],
+    );
+    if (rowCount !== 1) return false;
+    await c.query(`INSERT INTO visit_messages (visit_id, sender, kind, text) VALUES ($1, 'doctor', 'plan', $2)`, [visitId, message]);
+    for (const rx of prescriptions) {
+      await c.query(
+        `INSERT INTO prescriptions (visit_id, doctor_id, medication, dose, frequency, duration, instructions)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [visitId, doctorId, rx.medication, rx.dose, rx.frequency, rx.duration, rx.instructions ?? ''],
+      );
+    }
+    for (const o of orders) {
+      await c.query('INSERT INTO orders (visit_id, doctor_id, type, name, instructions) VALUES ($1, $2, $3, $4, $5)', [
+        visitId,
+        doctorId,
+        o.type,
+        o.name,
+        o.instructions ?? '',
+      ]);
+    }
+    return true;
+  });
+}
+
+/**
+ * The doctor needs to see the patient in person: offers a few times at one location.
+ * Only for a waiting case. Returns false otherwise.
+ */
+export async function offerAppointment(visitId, doctorId, { message, location, slots }) {
+  return inTransaction(async (c) => {
+    const { rowCount } = await c.query(
+      `UPDATE past_visits SET status = 'appointment_offered' WHERE id = $1 AND status = 'waiting_for_doctor'`,
+      [visitId],
+    );
+    if (rowCount !== 1) return false;
+    const { rows } = await c.query('INSERT INTO appointments (visit_id, doctor_id, location) VALUES ($1, $2, $3) RETURNING id', [
+      visitId,
+      doctorId,
+      location,
+    ]);
+    for (const startsAt of slots) {
+      await c.query('INSERT INTO appointment_slots (appointment_id, starts_at) VALUES ($1, $2)', [rows[0].id, startsAt]);
+    }
+    await c.query(`INSERT INTO visit_messages (visit_id, sender, kind, text) VALUES ($1, 'doctor', 'appointment', $2)`, [visitId, message]);
+    return true;
+  });
+}
+
+/**
+ * The patient picks one of the offered times. Returns false if there is no open offer,
+ * the slot isn't part of it, or the time has already passed.
+ */
+export async function bookAppointmentSlot(visitId, slotId) {
+  return inTransaction(async (c) => {
+    const { rows } = await c.query(
+      `UPDATE appointments a SET status = 'booked', booked_at = now()
+       WHERE a.visit_id = $1 AND a.status = 'offered'
+         AND EXISTS (SELECT 1 FROM appointment_slots s WHERE s.id = $2 AND s.appointment_id = a.id AND s.starts_at > now())
+       RETURNING a.id`,
+      [visitId, slotId],
+    );
+    if (rows.length === 0) return false;
+    await c.query('UPDATE appointment_slots SET chosen = (id = $2) WHERE appointment_id = $1', [rows[0].id, slotId]);
+    await c.query(`UPDATE past_visits SET status = 'appointment_booked' WHERE id = $1`, [visitId]);
+    return true;
+  });
+}
+
+async function getAppointment(db, visitId) {
+  const { rows } = await db.query(
+    `SELECT a.id, a.location, a.status, a.booked_at, d.name AS doctor_name FROM appointments a
+     JOIN doctors d ON d.id = a.doctor_id WHERE a.visit_id = $1`,
+    [visitId],
   );
+  if (rows.length === 0) return null;
+  const a = rows[0];
+  const slots = await db.query('SELECT id, starts_at, chosen FROM appointment_slots WHERE appointment_id = $1 ORDER BY starts_at', [a.id]);
+  return {
+    location: a.location,
+    status: a.status,
+    bookedAt: iso(a.booked_at),
+    doctorName: a.doctor_name,
+    slots: slots.rows.map((s) => ({ id: Number(s.id), startsAt: iso(s.starts_at), chosen: s.chosen })),
+  };
 }
 
-/** Closes the case. It then shows up in the patient's history for future visits. */
-export async function resolveVisit(visitId, { doctorId, diagnosis, summary, plan, confirmedCtas = null, ctasOverrideReason = null }) {
-  await requirePool().query(
-    `UPDATE past_visits
-     SET status = 'resolved', doctor_id = $2, diagnosis = $3, summary = $4, plan = $5, confirmed_ctas = $6,
-         ctas_override_reason = $7, resolved_at = now()
-     WHERE id = $1`,
-    [visitId, doctorId, diagnosis, summary, plan, confirmedCtas, ctasOverrideReason],
+/** Upcoming in-person appointments for the doctor dashboard, soonest first. */
+export async function listAppointments() {
+  const { rows } = await requirePool().query(
+    `SELECT v.id AS visit_id, v.patient_id, v.complaint, a.status, a.location, d.name AS doctor_name,
+            (SELECT min(s.starts_at) FROM appointment_slots s WHERE s.appointment_id = a.id AND (a.status = 'offered' OR s.chosen)) AS next_time
+     FROM appointments a
+     JOIN past_visits v ON v.id = a.visit_id
+     JOIN doctors d ON d.id = a.doctor_id
+     WHERE v.status IN ('appointment_offered', 'appointment_booked')
+     ORDER BY next_time ASC NULLS LAST`,
   );
-}
-
-/** Saves a test, imaging study or referral. type is "lab", "imaging", "referral" or "other". */
-export async function addOrder(visitId, doctorId, { type, name, instructions = '' }) {
-  await requirePool().query('INSERT INTO orders (visit_id, doctor_id, type, name, instructions) VALUES ($1, $2, $3, $4, $5)', [
-    visitId,
-    doctorId,
-    type,
-    name,
-    instructions,
-  ]);
+  return rows.map((r) => ({
+    visitId: Number(r.visit_id),
+    patientId: r.patient_id,
+    complaint: r.complaint,
+    status: r.status,
+    location: r.location,
+    doctorName: r.doctor_name,
+    // The booked time, or the earliest offered time while the patient hasn't picked yet.
+    time: iso(r.next_time),
+  }));
 }
 
 /**
  * A doctor takes a case. Returns true if they now have it, false if another doctor
- * already does or the case is no longer waiting. Claiming your own case again is fine.
+ * already does or the case is closed. Claiming your own case again is fine.
  */
 export async function claimVisit(visitId, doctorId) {
   const { rowCount } = await requirePool().query(
     `UPDATE past_visits SET assigned_doctor_id = $2, assigned_at = COALESCE(assigned_at, now())
-     WHERE id = $1 AND status IN ('waiting_for_doctor', 'doctor_asked')
+     WHERE id = $1 AND status IN ('waiting_for_doctor', 'appointment_offered', 'appointment_booked')
        AND (assigned_doctor_id IS NULL OR assigned_doctor_id = $2)`,
     [visitId, doctorId],
   );
   return rowCount === 1;
 }
 
-/** Open cases for the doctor dashboard: most urgent CTAS first, then longest wait. */
+/** Cases waiting for the doctor's answer: most urgent CTAS first, then longest wait. */
 export async function getQueue() {
   const { rows } = await requirePool().query(
     `SELECT v.id, v.patient_id, v.complaint, v.status, v.suggested_ctas, v.started_at,
@@ -262,7 +354,7 @@ export async function getQueue() {
              WHERE m.visit_id = v.id AND m.sender = 'patient'
                AND (v.doctor_read_at IS NULL OR m.sent_at > v.doctor_read_at)) AS unread_for_doctor
      FROM past_visits v LEFT JOIN doctors d ON d.id = v.assigned_doctor_id
-     WHERE v.status IN ('waiting_for_doctor', 'doctor_asked')
+     WHERE v.status = 'waiting_for_doctor'
      ORDER BY v.suggested_ctas ASC NULLS LAST, v.started_at ASC`,
   );
   return rows.map((r) => ({
@@ -318,6 +410,7 @@ export function toPatientView(visit, unreadCount = 0) {
     messages: visit.messages,
     prescriptions: visit.prescriptions,
     orders: visit.orders,
+    appointment: visit.appointment,
     unreadCount,
   };
 }
@@ -356,7 +449,7 @@ export async function getVisit(visitId) {
   );
   if (rows.length === 0) return null;
   const v = rows[0];
-  const [messages, prescriptions, orders] = await Promise.all([
+  const [messages, prescriptions, orders, appointment] = await Promise.all([
     db.query('SELECT sender, kind, text, options, sent_at FROM visit_messages WHERE visit_id = $1 ORDER BY sent_at, id', [visitId]),
     db.query(
       `SELECT p.*, d.name AS doctor_name FROM prescriptions p JOIN doctors d ON d.id = p.doctor_id
@@ -368,6 +461,7 @@ export async function getVisit(visitId) {
        WHERE o.visit_id = $1 ORDER BY o.ordered_at, o.id`,
       [visitId],
     ),
+    getAppointment(db, visitId),
   ]);
   return {
     id: Number(v.id),
@@ -404,6 +498,7 @@ export async function getVisit(visitId) {
       orderedAt: iso(o.ordered_at),
       doctorName: o.doctor_name,
     })),
+    appointment,
   };
 }
 

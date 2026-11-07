@@ -313,3 +313,14 @@ textarea { font: inherit; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1
   .clinic-main { padding: 1.25rem 1rem; }
   .form-row { grid-template-columns: 1fr; }
 }
+
+.pill { flex-shrink: 0; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 600; font-size: 0.85rem; background: var(--border); color: var(--text); }
+.pill-booked { background: var(--accent); color: var(--accent-text); }
+.slots { margin: 0; padding-left: 1.2rem; }
+.slots .chosen { font-weight: 600; }
+.items { border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1rem 1rem; margin: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.items legend { font-weight: 600; padding: 0 0.35rem; }
+.item-row { display: flex; flex-direction: column; gap: 0.6rem; padding-bottom: 0.75rem; border-bottom: 1px dashed var(--border); }
+.item-row label, .items label { margin-bottom: 0; }
+.items > .btn { align-self: flex-start; }
+.item-row .link-btn { align-self: flex-start; }
