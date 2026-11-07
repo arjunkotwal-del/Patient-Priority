@@ -1,13 +1,15 @@
-// Patient routes. The server keeps the whole chat in the database: the browser
-// sends one message at a time and only ever sees the patient view.
+// Patient routes. The patient describes the problem and answers the AI's questions.
+// Then the doctor answers once: a reply (with any prescriptions and tests), or in-person
+// appointment times for the patient to pick from. There is no chat with the doctor.
+// The server keeps everything in the database; the browser only ever sees the patient view.
 //
-//   POST /api/visits               start a case, get the first AI question
-//   POST /api/visits/:id/messages  answer the AI, or reply to the doctor
-//   GET  /api/visits/:id           the patient view: chat, plan, prescriptions, tests
-//   GET  /api/me/visits            all my visits with unread counts (notification badge)
-//   POST /api/visits/:id/read      mark a visit as read
+//   POST /api/visits                   start a case, get the first AI question
+//   POST /api/visits/:id/messages      answer the AI's question
+//   GET  /api/visits/:id               the patient view: doctor's reply, prescriptions, tests, appointment
+//   POST /api/visits/:id/appointment   pick one of the offered appointment times
+//   GET  /api/me/visits                all my visits with unread counts (notification badge)
+//   POST /api/visits/:id/read          mark a visit as read
 import express from 'express';
-import { scanForRedFlags } from '../lib/redFlags.ts';
 import { requireOwnVisit, requirePatient } from './access.js';
 import * as db from './db.js';
 import { notifyVisit } from './events.js';
@@ -64,17 +66,19 @@ async function advanceInterview(visit) {
   return { visitId: visit.id, status: 'waiting_for_doctor', patientMessage: WAITING_MESSAGE };
 }
 
-/** A reply in the doctor chat. Scanned first: a red flag sends the patient to triage. */
-async function replyToDoctor(visit, text) {
-  await db.addMessage(visit.id, { from: 'patient', kind: 'answer', text });
-  const hits = scanForRedFlags(text);
-  if (hits.length > 0) {
-    await db.escalateVisit(visit.id, hits.map((h) => `Red flag scanner: ${h.label}`));
-    return escalated(visit.id);
-  }
-  // Answering the doctor's question puts the case back in their court.
-  if (visit.status === 'doctor_asked') await db.setVisitStatus(visit.id, 'waiting_for_doctor');
-  return { visitId: visit.id, status: 'waiting_for_doctor' };
+/** Why a patient can't send a message right now. */
+function closedMessage(status) {
+  if (status === 'escalated') return TRIAGE_MESSAGE;
+  if (status === 'waiting_for_doctor') return 'Your answers are with the doctor. They will reply here.';
+  if (status === 'appointment_offered') return 'Your doctor wants to see you in person. Pick one of the offered times.';
+  if (status === 'appointment_booked') return 'Your in-person appointment is booked.';
+  return 'This visit is closed. Start a new visit if you need help.';
+}
+
+/** The slot id the patient picked, or null if it isn't a positive whole number. */
+export function parseSlotId(body) {
+  const id = body?.slotId;
+  return Number.isInteger(id) && id > 0 ? id : null;
 }
 
 /** Tells doctors when an interview ends: a new case in the queue, or one sent to triage. */
@@ -122,20 +126,31 @@ visitsRouter.post(
     const text = parseMessageText(req.body);
     if (!text) return res.status(400).json({ code: 'bad_request', message: 'Type a message first.' });
 
+    // Messages only go to the AI interview. There is no chat with the doctor.
     const visit = await db.getVisit(req.visitId);
-    if (visit.status === 'interviewing') {
-      await db.addMessage(visit.id, { from: 'patient', kind: 'answer', text });
-      const result = await advanceInterview(await db.getVisit(visit.id));
-      await announceInterviewEnd(result);
-      return res.json(result);
+    if (visit.status !== 'interviewing') {
+      return res.status(409).json({ code: 'not_interviewing', status: visit.status, message: closedMessage(visit.status) });
     }
-    if (visit.status === 'waiting_for_doctor' || visit.status === 'doctor_asked') {
-      const result = await replyToDoctor(visit, text);
-      await notifyVisit(visit.id, result.status === 'escalated' ? 'status_changed' : 'patient_message', 'doctors');
-      return res.json(result);
+    await db.addMessage(visit.id, { from: 'patient', kind: 'answer', text });
+    const result = await advanceInterview(await db.getVisit(visit.id));
+    await announceInterviewEnd(result);
+    res.json(result);
+  }),
+);
+
+visitsRouter.post(
+  '/visits/:id/appointment',
+  json,
+  requirePatient,
+  requireOwnVisit,
+  route(async (req, res) => {
+    const slotId = parseSlotId(req.body);
+    if (!slotId) return res.status(400).json({ code: 'bad_request', message: 'Pick one of the offered times.' });
+    if (!(await db.bookAppointmentSlot(req.visitId, slotId))) {
+      return res.status(409).json({ code: 'cannot_book', message: 'That time is no longer available. Reload and pick another.' });
     }
-    const message = visit.status === 'escalated' ? TRIAGE_MESSAGE : 'This visit is closed. Start a new visit if you need help.';
-    res.status(409).json({ code: 'visit_closed', message });
+    await notifyVisit(req.visitId, 'appointment_booked', 'doctors');
+    res.json(await db.getPatientView(req.visitId));
   }),
 );
 

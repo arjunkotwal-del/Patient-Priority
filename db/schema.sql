@@ -28,8 +28,12 @@ CREATE TABLE IF NOT EXISTS past_visits (
 ALTER TABLE past_visits ALTER COLUMN visit_date SET DEFAULT CURRENT_DATE;
 ALTER TABLE past_visits ALTER COLUMN summary DROP NOT NULL;
 ALTER TABLE past_visits ALTER COLUMN plan DROP NOT NULL;
-ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'resolved'
-  CHECK (status IN ('interviewing', 'waiting_for_doctor', 'doctor_asked', 'resolved', 'escalated'));
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'resolved';
+-- There is no doctor-patient chat: the doctor replies once, or offers in-person appointment times.
+UPDATE past_visits SET status = 'waiting_for_doctor' WHERE status = 'doctor_asked';
+ALTER TABLE past_visits DROP CONSTRAINT IF EXISTS past_visits_status_check;
+ALTER TABLE past_visits ADD CONSTRAINT past_visits_status_check CHECK (status IN (
+  'interviewing', 'waiting_for_doctor', 'appointment_offered', 'appointment_booked', 'resolved', 'escalated'));
 ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS doctor_id TEXT REFERENCES doctors(id);
 ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS diagnosis TEXT;
 ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS suggested_ctas SMALLINT CHECK (suggested_ctas BETWEEN 1 AND 5);
@@ -52,16 +56,38 @@ CREATE INDEX IF NOT EXISTS past_visits_patient_date ON past_visits (patient_id, 
 CREATE INDEX IF NOT EXISTS past_visits_queue ON past_visits (status, suggested_ctas, started_at);
 CREATE INDEX IF NOT EXISTS past_visits_patient_started ON past_visits (patient_id, started_at DESC);
 
--- Every message in a visit: AI questions, patient answers, doctor questions and plans.
+-- Every message in a visit: the AI interview, then the doctor's one reply or appointment offer.
 CREATE TABLE IF NOT EXISTS visit_messages (
   id       BIGSERIAL PRIMARY KEY,
   visit_id BIGINT NOT NULL REFERENCES past_visits(id) ON DELETE CASCADE,
   sender   TEXT NOT NULL CHECK (sender IN ('patient', 'ai', 'doctor')),
-  kind     TEXT NOT NULL CHECK (kind IN ('question', 'answer', 'plan')),
+  kind     TEXT NOT NULL,
   text     TEXT NOT NULL,
   sent_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE visit_messages DROP CONSTRAINT IF EXISTS visit_messages_kind_check;
+ALTER TABLE visit_messages ADD CONSTRAINT visit_messages_kind_check CHECK (kind IN ('question', 'answer', 'plan', 'appointment'));
 CREATE INDEX IF NOT EXISTS visit_messages_visit_sent ON visit_messages (visit_id, sent_at, id);
+
+-- In-person appointments: the doctor offers a few times, the patient picks one.
+CREATE TABLE IF NOT EXISTS appointments (
+  id         BIGSERIAL PRIMARY KEY,
+  visit_id   BIGINT NOT NULL REFERENCES past_visits(id) ON DELETE CASCADE,
+  doctor_id  TEXT NOT NULL REFERENCES doctors(id),
+  location   TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'offered' CHECK (status IN ('offered', 'booked')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  booked_at  TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS appointments_one_per_visit ON appointments (visit_id);
+
+CREATE TABLE IF NOT EXISTS appointment_slots (
+  id             BIGSERIAL PRIMARY KEY,
+  appointment_id BIGINT NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+  starts_at      TIMESTAMPTZ NOT NULL,
+  chosen         BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS appointment_slots_appointment ON appointment_slots (appointment_id, starts_at);
 -- Tappable answers for an AI question, so the chat can be reloaded.
 ALTER TABLE visit_messages ADD COLUMN IF NOT EXISTS options TEXT[];
 -- The premade question answers given at check-in.
