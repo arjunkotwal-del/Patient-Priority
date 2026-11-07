@@ -34,6 +34,8 @@ export const DEMO_VISIT_DETAILS = {
     prescriptions: [
       { medication: 'Ibuprofen', dose: '400 mg', frequency: 'Every 8 hours as needed', duration: '5 days', instructions: 'Take with food.' },
     ],
+    // [minutes after check-in, text]
+    doctorNotes: [[28, 'Diabetic, so ask about foot numbness at any follow-up. Short ibuprofen course only.']],
   },
   'demo-daniel:2025-11-20': {
     startTime: '14:10',

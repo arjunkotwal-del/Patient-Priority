@@ -65,3 +65,13 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   prescribed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS prescriptions_visit ON prescriptions (visit_id);
+
+-- Private notes for doctors only. Never shown to the patient or sent to the AI.
+CREATE TABLE IF NOT EXISTS doctor_notes (
+  id         BIGSERIAL PRIMARY KEY,
+  visit_id   BIGINT NOT NULL REFERENCES past_visits(id) ON DELETE CASCADE,
+  doctor_id  TEXT NOT NULL REFERENCES doctors(id),
+  text       TEXT NOT NULL,
+  written_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS doctor_notes_visit ON doctor_notes (visit_id, written_at);

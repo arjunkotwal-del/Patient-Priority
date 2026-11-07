@@ -53,6 +53,12 @@ try {
           [id, sender, kind, text, startedAt, minutes],
         );
       }
+      for (const [minutes, text] of details?.doctorNotes ?? []) {
+        await client.query(
+          `INSERT INTO doctor_notes (visit_id, doctor_id, text, written_at) VALUES ($1, $2, $3, $4::timestamptz + make_interval(mins => $5))`,
+          [id, DEMO_DOCTOR.id, text, startedAt, minutes],
+        );
+      }
       for (const rx of details?.prescriptions ?? []) {
         await client.query(
           `INSERT INTO prescriptions (visit_id, doctor_id, medication, dose, frequency, duration, instructions, prescribed_at)
@@ -65,10 +71,13 @@ try {
   await client.query('COMMIT');
   const { rows } = await client.query(
     `SELECT (SELECT count(*)::int FROM patients) AS patients, (SELECT count(*)::int FROM past_visits) AS visits,
-            (SELECT count(*)::int FROM visit_messages) AS messages, (SELECT count(*)::int FROM prescriptions) AS prescriptions`,
+            (SELECT count(*)::int FROM visit_messages) AS messages, (SELECT count(*)::int FROM prescriptions) AS prescriptions,
+            (SELECT count(*)::int FROM doctor_notes) AS notes`,
   );
   const c = rows[0];
-  console.log(`Database ready: ${c.patients} patients, ${c.visits} visits, ${c.messages} messages, ${c.prescriptions} prescriptions.`);
+  console.log(
+    `Database ready: ${c.patients} patients, ${c.visits} visits, ${c.messages} messages, ${c.prescriptions} prescriptions, ${c.notes} doctor notes.`,
+  );
 } catch (err) {
   await client.query('ROLLBACK').catch(() => {});
   console.error('Setup failed:', err.message);

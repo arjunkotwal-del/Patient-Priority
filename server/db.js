@@ -130,7 +130,22 @@ export async function resolveVisit(visitId, { doctorId, diagnosis, summary, plan
   );
 }
 
-/** Everything about one visit, or null if it doesn't exist. */
+/** Saves a private note. Doctors only: never show these to the patient or send them to the AI. */
+export async function addDoctorNote(visitId, doctorId, text) {
+  await requirePool().query('INSERT INTO doctor_notes (visit_id, doctor_id, text) VALUES ($1, $2, $3)', [visitId, doctorId, text]);
+}
+
+/** A visit's private notes, oldest first. Only call this from doctor-only code. */
+export async function getDoctorNotes(visitId) {
+  const { rows } = await requirePool().query(
+    `SELECT n.text, n.written_at, d.name AS doctor_name FROM doctor_notes n JOIN doctors d ON d.id = n.doctor_id
+     WHERE n.visit_id = $1 ORDER BY n.written_at, n.id`,
+    [visitId],
+  );
+  return rows.map((n) => ({ text: n.text, writtenAt: iso(n.written_at), doctorName: n.doctor_name }));
+}
+
+/** Everything about one visit, or null if it doesn't exist. Doctor notes are left out on purpose. */
 export async function getVisit(visitId) {
   const db = requirePool();
   const { rows } = await db.query(

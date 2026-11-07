@@ -54,7 +54,14 @@ export interface Prescription {
   doctorName: string;
 }
 
-/** Everything about one visit: the full chat, the doctor, the diagnosis and prescriptions. */
+/** A private note for doctors only. Never send these to the patient or the AI. */
+export interface DoctorNote {
+  text: string;
+  writtenAt: string;
+  doctorName: string;
+}
+
+/** Everything about one visit: the full chat, the doctor, the diagnosis and prescriptions. Excludes doctor notes. */
 export interface VisitRecord {
   id: number;
   patientId: string;
