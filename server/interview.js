@@ -4,6 +4,8 @@ import { buildInterviewPrompt } from '../lib/interviewPrompt.ts';
 import { getComplaintFlags, scanForRedFlags } from '../lib/redFlags.ts';
 
 export const MAX_QUESTIONS = 8;
+// Below this many questions, a "done" from the AI gets one nudge to check the red flags first.
+export const MIN_QUESTIONS = 4;
 export const TRIAGE_MESSAGE = 'Please go to the triage desk now.';
 
 const MAX_TEXT = 2000;
@@ -138,7 +140,14 @@ export async function runInterviewTurn(input) {
     history,
     premadeAnswers,
   });
-  const ai = await askGemini(systemPrompt, conversationText(input, finalTurn), RESPONSE_SCHEMA, parseAiQuestion);
+  let ai = await askGemini(systemPrompt, conversationText(input, finalTurn), RESPONSE_SCHEMA, parseAiQuestion);
+
+  // Lighter models sometimes stop after 2 questions without ruling out the red flags.
+  // Before the minimum, ask once more; if it still says done, accept it.
+  if (ai?.done && transcript.length < MIN_QUESTIONS) {
+    const nudge = `${conversationText(input)}\nYou have only asked ${transcript.length} questions. Before finishing, ask about any global or complaint-specific red flag that has not been clearly ruled out. Only set done if every one is already covered.`;
+    ai = (await askGemini(systemPrompt, nudge, RESPONSE_SCHEMA, parseAiQuestion)) ?? ai;
+  }
 
   // Without the AI nobody is checking for red flags, so a person has to take over.
   if (!ai) return { ...emptyResult(), escalate: true, escalateReason: 'Interview unavailable: AI did not respond' };
