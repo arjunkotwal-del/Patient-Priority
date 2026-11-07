@@ -1,0 +1,144 @@
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --text: #1a1d23;
+  --muted: #6b7280;
+  --border: #e3e6eb;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --danger: #dc2626;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  color: var(--text);
+  background: var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #111318;
+    --surface: #1a1d24;
+    --text: #e8eaee;
+    --muted: #9aa1ad;
+    --border: #2a2e37;
+    --accent: #4f8cff;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #111318;
+  --surface: #1a1d24;
+  --text: #e8eaee;
+  --muted: #9aa1ad;
+  --border: #2a2e37;
+  --accent: #4f8cff;
+}
+:root[data-font-size='large'] {
+  font-size: 19px;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+a { color: var(--accent); }
+h1 { margin-top: 0; }
+
+.btn {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn:disabled { opacity: 0.6; cursor: default; }
+.btn-lg { padding: 0.75rem 1.5rem; font-size: 1.05rem; }
+.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-danger { background: var(--danger); }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.topbar > .btn { margin-left: auto; }
+.brand { font-weight: 700; color: var(--text); text-decoration: none; }
+.topbar nav { display: flex; gap: 1rem; }
+.topbar nav a { color: var(--muted); text-decoration: none; }
+.topbar nav a.active { color: var(--text); font-weight: 600; }
+.topbar-user { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; color: var(--muted); }
+
+/* Landing */
+.hero { max-width: 720px; margin: 0 auto; padding: 6rem 1.5rem 4rem; text-align: center; }
+.hero h1 { font-size: clamp(2rem, 6vw, 3.25rem); margin-bottom: 1rem; }
+.hero p { color: var(--muted); font-size: 1.15rem; margin-bottom: 2rem; }
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 1.5rem 4rem;
+}
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; }
+.card h3 { margin-top: 0; }
+.card p { color: var(--muted); margin-bottom: 0; }
+.footer { text-align: center; color: var(--muted); padding: 2rem; }
+
+/* Login */
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.auth-card h1 { margin: 0; }
+.auth-card label { margin-bottom: 0; }
+
+/* Forms */
+label { display: flex; flex-direction: column; gap: 0.35rem; font-weight: 500; margin-bottom: 1rem; }
+label.checkbox { flex-direction: row; align-items: center; gap: 0.5rem; }
+input, select {
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+input:disabled { color: var(--muted); }
+.error { color: var(--danger); margin: 0; }
+.muted { color: var(--muted); }
+hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+
+/* App */
+.content { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+.panel { max-width: 520px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; }
+
+/* Medical page */
+.medical { display: grid; grid-template-columns: 220px 1fr; gap: 2rem; }
+.toc { position: sticky; top: 5rem; align-self: start; }
+.toc h4 { margin: 0 0 0.5rem; color: var(--muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+.toc ul { list-style: none; padding: 0; margin: 0; }
+.toc li { margin-bottom: 0.4rem; }
+.toc a { color: var(--text); text-decoration: none; }
+.medical-body section { scroll-margin-top: 5rem; padding: 1.5rem 0; border-bottom: 1px solid var(--border); }
+
+@media (max-width: 720px) {
+  .topbar { flex-wrap: wrap; gap: 0.75rem; padding: 0.75rem 1rem; }
+  .topbar nav { order: 3; width: 100%; }
+  .medical { grid-template-columns: 1fr; }
+  .toc { position: static; }
+  .content { padding: 1.5rem 1rem; }
+}
