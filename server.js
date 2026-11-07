@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { requireUser, getAppMetadata, findUsersByCardHash, setHealthCard } from './server/auth0.js';
 import { verifyOntarioCard } from './server/healthCard.js';
 import { encrypt, cardHash, checkKeys } from './server/secureStore.js';
+import { interviewHandler } from './server/interview.js';
 
 try {
   process.loadEnvFile('.env.local');
@@ -124,6 +125,8 @@ api.post('/verification', upload.single('card'), async (req, res, next) => {
     next(err);
   }
 });
+
+api.post('/interview', express.json({ limit: '100kb' }), interviewHandler);
 
 app.use('/api', api);
 app.use('/api', (_req, res) => res.status(404).json({ code: 'not_found', message: 'Not found.' }));
