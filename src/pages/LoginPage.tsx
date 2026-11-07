@@ -1,50 +1,32 @@
-import { useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
 export function LoginPage() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const { login, signup, error } = useAuth();
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? '/medical';
+  const [pending, setPending] = useState<'login' | 'signup' | null>(null);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-    try {
-      await login(email.trim(), password);
-      navigate(from, { replace: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed.');
-    } finally {
-      setSubmitting(false);
-    }
+  const go = (mode: 'login' | 'signup') => {
+    setPending(mode);
+    (mode === 'login' ? login : signup)(from).catch(() => setPending(null));
   };
 
   return (
     <div className="auth-page">
-      <form className="auth-card" onSubmit={onSubmit}>
+      <div className="auth-card">
         <Link to="/" className="brand">Patient Priority</Link>
-        <h1>Log in</h1>
-        <label>
-          Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
-        </label>
-        <label>
-          Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button className="btn btn-lg" type="submit" disabled={submitting}>
-          {submitting ? 'Logging in…' : 'Log in'}
+        <h1>Welcome</h1>
+        <p className="muted">Log in to your account, or create one to get started.</p>
+        {error && <p className="error">{error.message}</p>}
+        <button className="btn btn-lg" onClick={() => go('login')} disabled={pending !== null}>
+          {pending === 'login' ? 'Redirecting…' : 'Log in'}
         </button>
-      </form>
+        <button className="btn btn-lg btn-ghost" onClick={() => go('signup')} disabled={pending !== null}>
+          {pending === 'signup' ? 'Redirecting…' : 'Sign up'}
+        </button>
+      </div>
     </div>
   );
 }

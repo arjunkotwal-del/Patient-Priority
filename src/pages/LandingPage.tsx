@@ -5,7 +5,10 @@ export function LandingPage() {
     <div className="landing">
       <header className="topbar">
         <span className="brand">Patient Priority</span>
-        <Link to="/login" className="btn">Log in</Link>
+        <div className="topbar-user">
+          <Link to="/login" className="btn btn-ghost">Log in</Link>
+          <Link to="/login" className="btn">Sign up</Link>
+        </div>
       </header>
 
       <section className="hero">

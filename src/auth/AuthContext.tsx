@@ -1,68 +1,121 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Auth0Provider, useAuth0, type AppState } from '@auth0/auth0-react';
 
 export interface User {
+  id: string;
   name: string;
   email: string;
+  picture?: string;
 }
 
 interface AuthContextValue {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
+  isLoading: boolean;
+  error: Error | undefined;
+  /** Redirects to Auth0's hosted login page. */
+  login: (returnTo?: string) => Promise<void>;
+  /** Redirects to Auth0's hosted sign-up page. */
+  signup: (returnTo?: string) => Promise<void>;
   logout: () => void;
-  updateUser: (changes: Partial<User>) => void;
+  /** Display name is stored locally per user; email comes from Auth0. */
+  updateUser: (changes: Pick<Partial<User>, 'name'>) => void;
 }
 
-const STORAGE_KEY = 'pp.user';
+const domain = import.meta.env.VITE_AUTH0_DOMAIN as string | undefined;
+const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID as string | undefined;
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function loadUser(): User | null {
+const nameKey = (id: string) => `pp.displayName.${id}`;
+
+function readName(id: string): string | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as User) : null;
+    return localStorage.getItem(nameKey(id));
   } catch {
     return null;
   }
 }
 
-function saveUser(user: User | null) {
+function writeName(id: string, name: string) {
   try {
-    if (user) localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    else localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(nameKey(id), name);
   } catch {
-    /* storage unavailable; session stays in memory only */
+    /* storage unavailable; change lasts for this session only */
   }
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(loadUser);
+function AuthBridge({ children }: { children: ReactNode }) {
+  const auth0 = useAuth0();
+  const [nameOverride, setNameOverride] = useState<string | null>(null);
 
-  // MOCK AUTH: accepts any email + non-empty password.
-  // Replace the body of `login` with a call to your real auth backend.
-  const login = async (email: string, password: string) => {
-    if (!email || !password) throw new Error('Email and password are required.');
-    const next: User = { email, name: email.split('@')[0] };
-    saveUser(next);
-    setUser(next);
-  };
+  const id = auth0.user?.sub;
+  useEffect(() => {
+    setNameOverride(id ? readName(id) : null);
+  }, [id]);
 
-  const logout = () => {
-    saveUser(null);
-    setUser(null);
-  };
+  const user: User | null =
+    auth0.isAuthenticated && auth0.user && id
+      ? {
+          id,
+          email: auth0.user.email ?? '',
+          name: nameOverride ?? auth0.user.name ?? auth0.user.email?.split('@')[0] ?? 'User',
+          picture: auth0.user.picture,
+        }
+      : null;
 
-  const updateUser = (changes: Partial<User>) => {
-    setUser((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, ...changes };
-      saveUser(next);
-      return next;
+  const redirect = (screen_hint: 'login' | 'signup', returnTo = '/medical') =>
+    auth0.loginWithRedirect({
+      appState: { returnTo },
+      authorizationParams: { screen_hint },
     });
+
+  const value: AuthContextValue = {
+    user,
+    isLoading: auth0.isLoading,
+    error: auth0.error,
+    login: (returnTo) => redirect('login', returnTo),
+    signup: (returnTo) => redirect('signup', returnTo),
+    logout: () => auth0.logout({ logoutParams: { returnTo: window.location.origin } }),
+    updateUser: ({ name }) => {
+      if (!id || !name) return;
+      writeName(id, name);
+      setNameOverride(name);
+    },
   };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
+
+  if (!domain || !clientId) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <h1>Auth not configured</h1>
+          <p className="error">
+            Set VITE_AUTH0_DOMAIN and VITE_AUTH0_CLIENT_ID in .env.local, then restart the dev server.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, updateUser }}>
-      {children}
-    </AuthContext.Provider>
+    <Auth0Provider
+      domain={domain}
+      clientId={clientId}
+      authorizationParams={{ redirect_uri: window.location.origin }}
+      cacheLocation="localstorage"
+      useRefreshTokens
+      onRedirectCallback={(appState?: AppState) =>
+        navigate(appState?.returnTo ?? '/medical', { replace: true })
+      }
+    >
+      <AuthBridge>{children}</AuthBridge>
+    </Auth0Provider>
   );
 }
 
