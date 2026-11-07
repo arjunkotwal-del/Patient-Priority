@@ -23,10 +23,16 @@ Authorization: Bearer <token from getAccessTokenSilently()>
 
 ## Visit status
 
+There is **no chat between the patient and the doctor**. The patient talks to the AI, then the doctor
+answers once: either a reply (like an email, with any prescriptions and tests), or in-person appointment
+times for the patient to pick from.
+
 ```
-interviewing -> waiting_for_doctor <-> doctor_asked -> resolved
-      \                 \                   \
-       `-----------------`-------------------`--> escalated (go to the triage desk)
+interviewing -> waiting_for_doctor -> resolved                       (doctor replied)
+                        |
+                        `-> appointment_offered -> appointment_booked -> resolved   (doctor replies after the in-person visit)
+
+Any open step can become: escalated (go to the triage desk)
 ```
 
 Whenever a response has `status: "escalated"`, show the big triage screen with `patientMessage`
@@ -57,13 +63,12 @@ Returns `201` with one of the three **step responses**:
 ```
 Show `options` as buttons. If `allowOther` is true, also show a text box. `options` can be empty: then it's a typed answer.
 
-### Send a message: `POST /api/visits/:id/messages`
+### Answer the AI: `POST /api/visits/:id/messages`
 ```json
 { "text": "No" }
 ```
-- While `interviewing`: the answer to the AI question. Returns the next step response.
-- While `waiting_for_doctor` or `doctor_asked`: a reply to the doctor. Returns `{ visitId, status }`. A red flag in the reply returns the escalated response.
-- Resolved or escalated visits return `409 visit_closed`.
+Returns the next step response. Only works while `interviewing`. After that, it returns
+`409 not_interviewing` with a `message` that's safe to show, like "Your answers are with the doctor. They will reply here."
 
 **Disable the send button until the response arrives.** Two quick taps can create two AI questions.
 
@@ -82,14 +87,33 @@ The patient view. It never contains the SOAP note, red flags, CTAS levels or doc
   "prescriptions": [{ "medication": "Ibuprofen", "dose": "400 mg", "frequency": "Every 8 hours as needed",
                       "duration": "3 days", "instructions": "Take with food.", "prescribedAt": "...", "doctorName": "..." }],
   "orders": [{ "type": "lab", "name": "Throat swab", "instructions": "Only if not better in 3 days.", "orderedAt": "...", "doctorName": "..." }],
+  "appointment": null,
   "unreadCount": 1
 }
 ```
-`from` is `patient`, `ai` or `doctor`. `kind` is `question`, `answer` or `plan`. Order `type` is `lab`, `imaging`, `referral` or `other`.
+`from` is `patient`, `ai` or `doctor`. `kind` is `question`, `answer`, `plan` (the doctor's reply) or `appointment`
+(the doctor's message offering times). Order `type` is `lab`, `imaging`, `referral` or `other`.
+
+When the doctor offers an appointment, `status` is `appointment_offered` and `appointment` is filled in:
+```json
+"appointment": {
+  "location": "ER fast track, room 2", "status": "offered", "bookedAt": null, "doctorName": "Dr. Sam Rivera (demo)",
+  "slots": [{ "id": 41, "startsAt": "2026-11-08T15:00:00.000Z", "chosen": false },
+            { "id": 42, "startsAt": "2026-11-09T14:00:00.000Z", "chosen": false }]
+}
+```
+Show each slot as a button (times are UTC, so format them in the patient's time zone).
+
+### Pick an appointment time: `POST /api/visits/:id/appointment`
+```json
+{ "slotId": 41 }
+```
+Returns the updated patient view with `status: "appointment_booked"` and that slot's `chosen: true`.
+Returns `409 cannot_book` if the time has passed, it isn't one of the offered slots, or a time was already picked.
 
 ### All my visits: `GET /api/me/visits`
 ```json
-{ "visits": [{ "id": 12, "complaint": "...", "status": "doctor_asked", "startedAt": "...", "resolvedAt": null,
+{ "visits": [{ "id": 12, "complaint": "...", "status": "appointment_offered", "startedAt": "...", "resolvedAt": null,
                "doctorName": "Dr. Sam Rivera (demo)", "unreadCount": 1 }],
   "unreadTotal": 1 }
 ```
@@ -106,15 +130,38 @@ Every doctor route returns `403 forbidden` for anyone who isn't a doctor. Every 
 
 | Route | Body | Returns |
 |---|---|---|
-| `GET /api/doctor/queue` | | `{ queue: QueueItem[] }`, most urgent CTAS first, then longest wait |
+| `GET /api/doctor/queue` | | `{ queue: QueueItem[] }`: cases waiting for an answer, most urgent CTAS first, then longest wait |
+| `GET /api/doctor/appointments` | | `{ appointments: [...] }`: in-person appointments offered or booked, soonest first |
 | `POST /api/doctor/visits/:id/claim` | | `{ ok: true }`, or `409 claimed_by_other` |
 | `GET /api/doctor/visits/:id` | | `{ visit, notes, history }` (also marks it read for the doctor) |
-| `POST /api/doctor/visits/:id/messages` | `{ kind: "question" \| "plan", text }` | `201`. A question sets status to `doctor_asked` |
-| `POST /api/doctor/visits/:id/prescriptions` | `{ medication, dose, frequency, duration, instructions? }` | `201` |
-| `POST /api/doctor/visits/:id/orders` | `{ type: "lab" \| "imaging" \| "referral" \| "other", name, instructions? }` | `201` |
+| `POST /api/doctor/visits/:id/reply` | see below | `{ ok: true }`. Closes the case |
+| `POST /api/doctor/visits/:id/appointment` | see below | `201`. Status becomes `appointment_offered` |
 | `POST /api/doctor/visits/:id/notes` | `{ text }` | `201`. Private: never shown to the patient or the AI |
-| `POST /api/doctor/visits/:id/resolve` | `{ diagnosis, plan, confirmedCtas: 4 \| 5, ctasOverrideReason?, summary? }` | `{ ok: true }` |
 | `POST /api/doctor/visits/:id/escalate` | `{ reason }` | `{ ok: true }` |
+
+**The reply** (one message, like an email, with everything in it):
+```json
+{
+  "message": "This looks like a viral sore throat. Rest, fluids, and the ibuprofen below.",
+  "diagnosis": "Viral sore throat",
+  "confirmedCtas": 5,
+  "ctasOverrideReason": "Only needed if confirmedCtas differs from the AI's suggestion",
+  "prescriptions": [{ "medication": "Ibuprofen", "dose": "400 mg", "frequency": "Every 8 hours as needed", "duration": "3 days", "instructions": "Take with food." }],
+  "orders": [{ "type": "lab", "name": "Throat swab", "instructions": "Only if not better in 3 days." }]
+}
+```
+`prescriptions` and `orders` are optional (up to 10 each). Works on a `waiting_for_doctor` case, or an
+`appointment_booked` case after the in-person visit.
+
+**The appointment offer** (in person only, 1 to 4 times, at least 15 minutes ahead and within 60 days):
+```json
+{
+  "message": "I would like to look in your ear in person. Pick a time that works.",
+  "location": "ER fast track, room 2",
+  "slots": ["2026-11-08T10:00:00-05:00", "2026-11-09T09:00:00-05:00"]
+}
+```
+Only works on a `waiting_for_doctor` case.
 
 `QueueItem`:
 ```json
@@ -123,14 +170,16 @@ Every doctor route returns `403 forbidden` for anyone who isn't a doctor. Every 
   "assignedDoctor": { "id": "demo-dr-rivera", "name": "Dr. Sam Rivera (demo)" }, "unreadForDoctor": 2 }
 ```
 
-The case view's `visit` has everything: `soap`, `suggestedCtas`, `redFlags`, `premadeAnswers`, `messages`, `prescriptions`, `orders`.
+The case view's `visit` has everything: `soap` (the AI summary: `subjective`, `assessment`, `plan`), `suggestedCtas`,
+`redFlags`, `premadeAnswers`, `messages`, `prescriptions`, `orders`, `appointment`.
 `history` is the patient's allergies, medications, conditions and past visits. `notes` are the private notes.
 
 Rules the server enforces:
-- Messaging, prescribing, ordering, resolving or escalating claims the case. If another doctor has it, you get `409 claimed_by_other` with their name. Anyone can still view it and add notes.
+- Replying, offering an appointment or escalating claims the case. If another doctor has it, you get `409 claimed_by_other` with their name. Anyone can still view it and add notes.
+- One reply per case. Doing something the case's status doesn't allow returns `409 wrong_status`.
 - If `confirmedCtas` differs from the AI's `suggestedCtas`, `ctasOverrideReason` is required.
-- CTAS 1 to 3 is not minor: use `escalate`, not `resolve`.
-- Resolved and escalated cases can't be changed (`409 visit_closed`). Notes are always allowed.
+- CTAS 1 to 3 is not minor: use `escalate`, not `reply`.
+- Notes are always allowed.
 
 ---
 
@@ -146,7 +195,7 @@ useEffect(() => subscribeToUpdates({
   onConnect: refetch,                    // catch up on anything missed while offline
   onEvent: (e) => {
     refetch();
-    if (e.reason === 'doctor_message') notifyIfHidden('Your doctor replied', 'Tap to read it.', `/visits/${e.visitId}`);
+    if (e.reason === 'doctor_reply' || e.reason === 'appointment_offered') notifyIfHidden('Your doctor replied', 'Tap to read it.', `/visits/${e.visitId}`);
   },
 }), []);
 ```
@@ -157,10 +206,10 @@ Events are `{ visitId, reason }` only. Refetch to see what changed.
 | reason | Patient gets it | Doctors get it |
 |---|---|---|
 | `new_case` | | Yes |
-| `patient_message` | | Yes |
-| `doctor_message` | Yes | Yes |
-| `doctor_update` (prescription or test) | Yes | |
-| `status_changed` | When resolved or escalated | Yes |
+| `doctor_reply` (with any prescriptions and tests) | Yes | Yes |
+| `appointment_offered` | Yes | Yes |
+| `appointment_booked` | | Yes |
+| `status_changed` | When escalated | Yes |
 
 Notifications only appear while the site is open in some tab. Offline patients see the unread badge when they come back.
 
@@ -177,7 +226,9 @@ Every error is `{ "code": "...", "message": "..." }`. The message is safe to sho
 | 401 | `bad_ticket` | Live stream ticket is wrong, used or expired. The helper retries for you |
 | 403 | `forbidden` | Not a doctor |
 | 404 | `not_found` | The visit doesn't exist or isn't yours |
-| 409 | `visit_closed` | The visit is resolved or escalated |
+| 409 | `not_interviewing` | The patient tried to message after the AI interview ended |
+| 409 | `cannot_book` | That appointment time can't be booked |
+| 409 | `wrong_status` | The doctor tried something the case's status doesn't allow |
 | 409 | `claimed_by_other` | Another doctor has the case |
 | 503 | `records_unavailable` | The database isn't reachable |
 | 500 | `server_error` | Anything else |

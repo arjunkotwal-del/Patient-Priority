@@ -52,8 +52,6 @@ export const DEMO_VISIT_DETAILS = {
       [0, 'patient', 'answer', 'I rolled my left ankle playing soccer.'],
       [1, 'ai', 'question', 'Right after it happened, could you walk at least 4 steps on it?'],
       [1, 'patient', 'answer', 'Yes'],
-      [25, 'doctor', 'question', 'Is the swelling on the outside of the ankle?'],
-      [27, 'patient', 'answer', 'Yes, the outside.'],
       [30, 'doctor', 'plan', 'Rest, ice for 20 minutes a few times a day, compression, and keep it raised. Take the ibuprofen with food.'],
     ],
     prescriptions: [

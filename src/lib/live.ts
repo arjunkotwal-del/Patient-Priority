@@ -6,18 +6,18 @@
 //     getToken: getAccessTokenSilently,
 //     onEvent: (e) => {
 //       if (e.visitId === visitId) refetchVisit();
-//       if (e.reason === 'doctor_message') notifyIfHidden('Your doctor replied', 'Tap to read it.', `/visits/${e.visitId}`);
+//       if (e.reason === 'doctor_reply' || e.reason === 'appointment_offered') notifyIfHidden('Your doctor replied', 'Tap to read it.', `/visits/${e.visitId}`);
 //     },
 //   }), [visitId]);
 
 /**
  * What the server sends. Events never contain health details: refetch the visit to see what changed.
- * - Patients get: doctor_message, doctor_update (prescription or test), status_changed
- * - Doctors get: new_case, patient_message, doctor_message, status_changed
+ * - Patients get: doctor_reply (with any prescriptions and tests), appointment_offered, status_changed
+ * - Doctors get: new_case, appointment_booked, doctor_reply, appointment_offered, status_changed
  */
 export interface LiveEvent {
   visitId: number;
-  reason: 'new_case' | 'patient_message' | 'doctor_message' | 'doctor_update' | 'status_changed';
+  reason: 'new_case' | 'doctor_reply' | 'appointment_offered' | 'appointment_booked' | 'status_changed';
 }
 
 interface SubscribeOptions {
