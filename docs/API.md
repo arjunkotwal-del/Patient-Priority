@@ -10,7 +10,7 @@ Authorization: Bearer <token from getAccessTokenSilently()>
 ## Setup (once per teammate)
 
 1. `npm install`
-2. In `.env.local` (never commit it), add `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-2.5-flash` and `DATABASE_URL`.
+2. In `.env.local` (never commit it), add `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.5-flash-lite` and `DATABASE_URL`.
 3. `npm run db:setup` creates the tables and the demo data. **We all share one database, so this resets the demo patients for everyone.** Only run it when that's okay.
 4. To use your own logins in the demo, put your Auth0 user ids (Auth0 dashboard > User Management > Users) in `.env.local`, then run `npm run db:setup` again:
    ```
