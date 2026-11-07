@@ -9,12 +9,22 @@ function Loading() {
   );
 }
 
-/** Only reachable when logged in; otherwise sends you to /login. */
+/** Logged in AND health card verified; otherwise sends you to /login or /verify. */
 export function ProtectedRoute() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, verification, verificationLoading } = useAuth();
   const location = useLocation();
-  if (isLoading) return <Loading />;
+  if (isLoading || (user && verificationLoading)) return <Loading />;
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (!verification?.verified) return <Navigate to="/verify" replace state={{ from: location }} />;
+  return <Outlet />;
+}
+
+/** Logged in but not yet verified: the health card scan step. */
+export function VerifyRoute() {
+  const { user, isLoading, verification, verificationLoading } = useAuth();
+  if (isLoading || (user && verificationLoading)) return <Loading />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (verification?.verified) return <Navigate to="/medical" replace />;
   return <Outlet />;
 }
 

@@ -142,3 +142,52 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
   .toc { position: static; }
   .content { padding: 1.5rem 1rem; }
 }
+
+/* Health card verification */
+.verify { max-width: 620px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem; }
+.verify fieldset { border: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.75rem; }
+.verify legend { font-weight: 600; margin-bottom: 0.75rem; padding: 0; }
+.verify label { margin-bottom: 0; }
+.verify .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.verify label.checkbox { align-items: flex-start; font-weight: 400; }
+.verify label.checkbox input { margin-top: 0.2rem; }
+.row-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.link-btn { background: none; border: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; }
+
+.scanner { position: relative; border-radius: 12px; overflow: hidden; background: #000; }
+.scanner video { display: block; width: 100%; height: auto; }
+.scanner-guide {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 86%; /* keep in sync with GUIDE_WIDTH in VerifyPage.tsx */
+  aspect-ratio: 85.6 / 54;
+  transform: translate(-50%, -50%);
+  border: 3px solid #fff;
+  border-radius: 14px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+.scanner-hint {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  color: #fff;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px #000;
+}
+.scanner-preview { width: 100%; border-radius: 12px; border: 1px solid var(--border); display: block; }
+.scanner-empty {
+  aspect-ratio: 85.6 / 54;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+}
+.health-card-status { display: flex; flex-direction: column; gap: 0.25rem; }
+
+@media (max-width: 520px) {
+  .verify .row { grid-template-columns: 1fr; }
+}

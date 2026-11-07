@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Auth0Provider, useAuth0, type AppState } from '@auth0/auth0-react';
 
@@ -8,6 +8,18 @@ export interface User {
   email: string;
   picture?: string;
 }
+
+/** Health card status as returned by the server (never includes the full number). */
+export type Verification =
+  | { verified: false }
+  | {
+      verified: true;
+      province: 'ON';
+      last4: string;
+      versionCode: string | null;
+      legalName: { first: string; last: string };
+      verifiedAt: string;
+    };
 
 interface AuthContextValue {
   user: User | null;
@@ -20,10 +32,19 @@ interface AuthContextValue {
   logout: () => void;
   /** Display name is stored locally per user; email comes from Auth0. */
   updateUser: (changes: Pick<Partial<User>, 'name'>) => void;
+  /** Access token for calling our /api routes. */
+  getToken: () => Promise<string>;
+  /** null while loading or when the status couldn't be fetched. */
+  verification: Verification | null;
+  verificationLoading: boolean;
+  verificationError: string | null;
+  refreshVerification: () => Promise<void>;
+  setVerification: (v: Verification) => void;
 }
 
 const domain = import.meta.env.VITE_AUTH0_DOMAIN as string | undefined;
 const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID as string | undefined;
+const audience = import.meta.env.VITE_AUTH0_AUDIENCE as string | undefined;
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -48,14 +69,48 @@ function writeName(id: string, name: string) {
 function AuthBridge({ children }: { children: ReactNode }) {
   const auth0 = useAuth0();
   const [nameOverride, setNameOverride] = useState<string | null>(null);
+  const [verification, setVerification] = useState<Verification | null>(null);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
-  const id = auth0.user?.sub;
+  const id = auth0.isAuthenticated ? auth0.user?.sub : undefined;
+  const { getAccessTokenSilently } = auth0;
+
   useEffect(() => {
     setNameOverride(id ? readName(id) : null);
   }, [id]);
 
+  const getToken = useCallback(async () => {
+    const token = await getAccessTokenSilently();
+    if (!token) throw new Error('Could not get an access token. Please log in again.');
+    return token;
+  }, [getAccessTokenSilently]);
+
+  const refreshVerification = useCallback(async () => {
+    setVerificationLoading(true);
+    setVerificationError(null);
+    try {
+      const res = await fetch('/api/verification', {
+        headers: { Authorization: `Bearer ${await getToken()}` },
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.message ?? `Server error (${res.status})`);
+      setVerification(body as Verification);
+    } catch (err) {
+      setVerification(null);
+      setVerificationError(err instanceof Error ? err.message : 'Could not check verification status.');
+    } finally {
+      setVerificationLoading(false);
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    if (id) void refreshVerification();
+    else setVerification(null);
+  }, [id, refreshVerification]);
+
   const user: User | null =
-    auth0.isAuthenticated && auth0.user && id
+    id && auth0.user
       ? {
           id,
           email: auth0.user.email ?? '',
@@ -82,6 +137,13 @@ function AuthBridge({ children }: { children: ReactNode }) {
       writeName(id, name);
       setNameOverride(name);
     },
+    getToken,
+    verification,
+    // Treat "logged in but not fetched yet" as loading so guards don't redirect early.
+    verificationLoading: verificationLoading || (!!id && verification === null && verificationError === null),
+    verificationError,
+    refreshVerification,
+    setVerification,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -107,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <Auth0Provider
       domain={domain}
       clientId={clientId}
-      authorizationParams={{ redirect_uri: window.location.origin }}
+      authorizationParams={{ redirect_uri: window.location.origin, audience }}
       cacheLocation="localstorage"
       useRefreshTokens
       onRedirectCallback={(appState?: AppState) =>
