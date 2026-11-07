@@ -13,7 +13,6 @@ export const DEMO_OPEN_CASES = [
     suggestedCtas: 4,
     soap: {
       subjective: 'Right ear pain since yesterday, pain 5/10, getting worse. Denies fever and ear discharge. Allergies: sulfa drugs, latex.',
-      objective: 'Remote intake, no physical exam or vitals.',
       assessment: 'Worsening one-sided ear pain with no reported red flags. Presents as minor.',
       plan: 'For doctor review. Hearing changes were not reported.',
     },

@@ -30,7 +30,8 @@ export interface TriageResult {
   escalate: boolean;
   redFlags: string[];
   suggestedCtas: 3 | 4 | 5;
-  soap: { subjective: string; objective: string; assessment: string; plan: string };
+  /** Summary note for the doctor. No objective section: there is no exam, so it is all self-reported. */
+  soap: { subjective: string; assessment: string; plan: string };
 }
 
 export interface Message {

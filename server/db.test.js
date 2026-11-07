@@ -29,7 +29,7 @@ describe('toPatientView', () => {
     confirmedCtas: 4,
     ctasOverrideReason: 'Looked worse',
     redFlags: ['Something scary'],
-    soap: { subjective: 'SECRET-SOAP', objective: '', assessment: '', plan: '' },
+    soap: { subjective: 'SECRET-SOAP', assessment: '', plan: '' },
     messages: [],
     prescriptions: [],
     orders: [],

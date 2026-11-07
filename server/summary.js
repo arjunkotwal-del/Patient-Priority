@@ -4,8 +4,8 @@ import { getComplaintFlags } from '../lib/redFlags.ts';
 import { buildSummaryPrompt } from '../lib/summaryPrompt.ts';
 import { askGemini, conversationText, scanInterview } from './interview.js';
 
-const SOAP_FIELDS = ['subjective', 'objective', 'assessment', 'plan'];
-const EMPTY_SOAP = { subjective: '', objective: '', assessment: '', plan: '' };
+const SOAP_FIELDS = ['subjective', 'assessment', 'plan'];
+const EMPTY_SOAP = { subjective: '', assessment: '', plan: '' };
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',

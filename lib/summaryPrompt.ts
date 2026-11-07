@@ -17,12 +17,12 @@ The patient's own description, their premade answers, and the interview transcri
 RULES
 - Use ONLY what the patient said and what is in their history. Never invent symptoms, vitals, or exam findings.
 - If something important was not asked or answered, say "not reported". Never fill the gap with a guess.
+- Only say a treatment helped if the patient said so. "Took acetaminophen" is not "relief with acetaminophen".
 - Do NOT diagnose. Do NOT recommend treatments, medications, tests, or doses. The doctor decides all of that.
 - Keep it short and scannable. A doctor should be able to read it in under 30 seconds.
 
-SOAP NOTE
-- subjective: the complaint in the patient's words, onset, duration, severity, trend, what they have tried, relevant negatives, allergies, current medications.
-- objective: no exam was done, so start with "Remote intake, no physical exam or vitals." Then add only relevant facts from their history.
+SUMMARY NOTE (three parts; there is no exam, so everything is self-reported)
+- subjective: the complaint in the patient's words, onset, duration, severity, trend, what they have tried, relevant negatives, allergies, current medications, and any relevant condition from their history.
 - assessment: one or two neutral sentences describing how the case presents and why it does or does not seem minor. No diagnosis.
 - plan: "For doctor review." followed by any missing information or history conflicts the doctor should check. Never treatment.
 
@@ -46,17 +46,17 @@ Respond ONLY with JSON matching this shape:
   "escalate": boolean,
   "redFlags": string[],
   "suggestedCtas": 3 | 4 | 5,
-  "soap": { "subjective": string, "objective": string, "assessment": string, "plan": string }
+  "soap": { "subjective": string, "assessment": string, "plan": string }
 }
 
 EXAMPLES
 Input: Sore throat for 3 days, slowly improving. Pain 4/10. Swallowing own spit is fine. No fever. Took acetaminophen with some relief. No allergies, no medications.
-{"escalate":false,"redFlags":[],"suggestedCtas":5,"soap":{"subjective":"Sore throat for 3 days, improving, pain 4/10. Swallowing saliva without difficulty. Denies fever. Some relief with acetaminophen. No known allergies, no current medications.","objective":"Remote intake, no physical exam or vitals.","assessment":"Stable, improving throat pain with no reported red flags. Presents as minor.","plan":"For doctor review. Nothing further flagged."}}
+{"escalate":false,"redFlags":[],"suggestedCtas":5,"soap":{"subjective":"Sore throat for 3 days, improving, pain 4/10. Swallowing saliva without difficulty. Denies fever. Some relief with acetaminophen. No known allergies, no current medications.","assessment":"Stable, improving throat pain with no reported red flags. Presents as minor.","plan":"For doctor review. Nothing further flagged."}}
 
 Input: Rolled left ankle playing basketball yesterday. Could walk 4 steps right after, with a limp. Swelling is getting worse. Pain 6/10. Took ibuprofen. History: type 2 diabetes, on metformin. Patient said no allergies.
-{"escalate":false,"redFlags":[],"suggestedCtas":4,"soap":{"subjective":"Rolled left ankle playing basketball yesterday. Able to walk 4 steps right after, with a limp. Swelling worsening, pain 6/10. Took ibuprofen. Reports no allergies. Taking metformin.","objective":"Remote intake, no physical exam or vitals. History of type 2 diabetes.","assessment":"Worsening ankle swelling after a twisting injury, able to bear weight. Presents as minor, with a relevant condition in the history.","plan":"For doctor review. Numbness and skin colour of the foot were not reported."}}
+{"escalate":false,"redFlags":[],"suggestedCtas":4,"soap":{"subjective":"Rolled left ankle playing basketball yesterday. Able to walk 4 steps right after, with a limp. Swelling worsening, pain 6/10. Took ibuprofen. Reports no allergies. Taking metformin for type 2 diabetes.","assessment":"Worsening ankle swelling after a twisting injury, able to bear weight. Presents as minor, with a relevant condition in the history.","plan":"For doctor review. Numbness and skin colour of the foot were not reported."}}
 
 Input: Rash on both arms since this morning, spreading quickly. Patient says their lips feel puffy. Started a new antibiotic yesterday. History: allergic to penicillin.
-{"escalate":true,"redFlags":["Lip swelling with a spreading rash","New antibiotic with a known drug allergy"],"suggestedCtas":3,"soap":{"subjective":"Rash on both arms since this morning, spreading quickly. Reports puffy lips. Started a new antibiotic yesterday, name not reported.","objective":"Remote intake, no physical exam or vitals. Penicillin allergy on file.","assessment":"Rapidly spreading rash with lip swelling after a new medication. Does not present as minor.","plan":"For doctor review. Needs in-person triage now."}}
+{"escalate":true,"redFlags":["Lip swelling with a spreading rash","New antibiotic with a known drug allergy"],"suggestedCtas":3,"soap":{"subjective":"Rash on both arms since this morning, spreading quickly. Reports puffy lips. Started a new antibiotic yesterday, name not reported. Penicillin allergy on file.","assessment":"Rapidly spreading rash with lip swelling after a new medication. Does not present as minor.","plan":"For doctor review. Needs in-person triage now."}}
 `.trim();
 }

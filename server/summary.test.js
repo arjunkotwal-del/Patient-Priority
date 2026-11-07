@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import { scanForRedFlags } from '../lib/redFlags.ts';
 import { parseTriageResult, runSummary } from './summary.js';
 
-const soap = { subjective: 's', objective: 'o', assessment: 'a', plan: 'p' };
+const soap = { subjective: 's', assessment: 'a', plan: 'p' };
 const minor = { escalate: false, redFlags: [], suggestedCtas: 5, soap };
 const parse = (value) => parseTriageResult(JSON.stringify(value));
 
