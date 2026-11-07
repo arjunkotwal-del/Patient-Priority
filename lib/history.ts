@@ -9,7 +9,11 @@ export function formatHistoryForPrompt(history: PatientHistory | null | undefine
   const visits = [...history.pastVisits]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, RECENT_VISITS)
-    .map((v) => `- ${v.date}: ${v.complaint}. ${v.summary} Plan: ${v.plan}`);
+    .map((v) => {
+      const diagnosis = v.diagnosis ? ` Doctor's diagnosis: ${v.diagnosis}.` : '';
+      const prescribed = v.prescriptions?.length ? ` Prescribed: ${v.prescriptions.join(', ')}.` : '';
+      return `- ${v.date}: ${v.complaint}. ${v.summary}${diagnosis}${prescribed} Plan: ${v.plan}`;
+    });
   return [
     `Today's date: ${new Date().toISOString().slice(0, 10)}`,
     `Allergies: ${list(history.allergies)}`,
