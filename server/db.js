@@ -1,6 +1,7 @@
 // Patient history in Postgres (TigerData). Server only: the browser never talks to the database.
 // Without DATABASE_URL, the fake demo patients are used instead, so the app still runs.
 import pg from 'pg';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DEMO_PATIENTS } from '../lib/history.ts';
 
@@ -76,10 +77,43 @@ export async function loadHistory(demoPatientId, auth0UserId) {
 
 // ---- Visits: one per case, with its full chat, doctor, diagnosis and prescriptions ----
 
+/** Thrown when DATABASE_URL isn't set, so routes can answer 503 instead of a generic error. */
+export class DatabaseUnavailableError extends Error {
+  constructor() {
+    super('Missing env var DATABASE_URL');
+    this.name = 'DatabaseUnavailableError';
+  }
+}
+
 function requirePool() {
   const db = getPool();
-  if (!db) throw new Error('Missing env var DATABASE_URL');
+  if (!db) throw new DatabaseUnavailableError();
   return db;
+}
+
+// ---- Who is who: logged-in users mapped to patients and doctors ----
+
+/** The doctor linked to this Auth0 user, or null if they aren't a doctor. */
+export async function getDoctorByAuth0Id(auth0UserId) {
+  const { rows } = await requirePool().query('SELECT id, name FROM doctors WHERE auth0_user_id = $1', [auth0UserId]);
+  return rows[0] ?? null;
+}
+
+/** The patient id for this Auth0 user. Creates an empty patient record on their first visit. */
+export async function getOrCreatePatientId(auth0UserId) {
+  const { rows } = await requirePool().query(
+    `INSERT INTO patients (id, auth0_user_id) VALUES ($1, $2)
+     ON CONFLICT (auth0_user_id) DO UPDATE SET auth0_user_id = EXCLUDED.auth0_user_id
+     RETURNING id`,
+    [`p_${randomUUID()}`, auth0UserId],
+  );
+  return rows[0].id;
+}
+
+/** Which patient a visit belongs to, or null if the visit doesn't exist. */
+export async function getVisitPatientId(visitId) {
+  const { rows } = await requirePool().query('SELECT patient_id FROM past_visits WHERE id = $1', [visitId]);
+  return rows[0]?.patient_id ?? null;
 }
 
 const iso = (value) => (value ? new Date(value).toISOString() : null);
