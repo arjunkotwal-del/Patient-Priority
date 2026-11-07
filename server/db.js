@@ -119,17 +119,68 @@ export async function getVisitPatientId(visitId) {
 const iso = (value) => (value ? new Date(value).toISOString() : null);
 
 /** Opens a new case when the patient checks in. Returns the visit id. */
-export async function createVisit(patientId, complaint) {
+export async function createVisit(patientId, complaint, premadeAnswers = []) {
   const { rows } = await requirePool().query(
-    `INSERT INTO past_visits (patient_id, complaint, status) VALUES ($1, $2, 'interviewing') RETURNING id`,
-    [patientId, complaint],
+    `INSERT INTO past_visits (patient_id, complaint, status, premade_answers) VALUES ($1, $2, 'interviewing', $3) RETURNING id`,
+    [patientId, complaint, JSON.stringify(premadeAnswers)],
   );
   return Number(rows[0].id);
 }
 
 /** Saves one chat message. sender is "patient", "ai" or "doctor"; kind is "question", "answer" or "plan". */
-export async function addMessage(visitId, { from, kind, text }) {
-  await requirePool().query('INSERT INTO visit_messages (visit_id, sender, kind, text) VALUES ($1, $2, $3, $4)', [visitId, from, kind, text]);
+export async function addMessage(visitId, { from, kind, text, options = null }) {
+  await requirePool().query('INSERT INTO visit_messages (visit_id, sender, kind, text, options) VALUES ($1, $2, $3, $4, $5)', [
+    visitId,
+    from,
+    kind,
+    text,
+    options?.length ? options : null,
+  ]);
+}
+
+/** Sends the case to the triage desk, keeping any SOAP note and adding the reasons for staff. */
+export async function escalateVisit(visitId, reasons) {
+  await requirePool().query(
+    `UPDATE past_visits SET status = 'escalated', suggested_ctas = COALESCE(suggested_ctas, 3),
+            red_flags = ARRAY(SELECT DISTINCT unnest(red_flags || $2::text[]))
+     WHERE id = $1`,
+    [visitId, reasons],
+  );
+}
+
+/** A patient's visits, newest first, with unread counts for the notification badge. */
+export async function listPatientVisits(patientId) {
+  const { rows } = await requirePool().query(
+    `SELECT v.id, v.complaint, v.status, v.started_at, v.resolved_at, COALESCE(d.name, a.name) AS doctor_name,
+            (SELECT count(*)::int FROM visit_messages m
+             WHERE m.visit_id = v.id AND m.sender = 'doctor'
+               AND (v.patient_read_at IS NULL OR m.sent_at > v.patient_read_at)) AS unread_count
+     FROM past_visits v
+     LEFT JOIN doctors d ON d.id = v.doctor_id
+     LEFT JOIN doctors a ON a.id = v.assigned_doctor_id
+     WHERE v.patient_id = $1
+     ORDER BY v.started_at DESC, v.id DESC`,
+    [patientId],
+  );
+  return rows.map((r) => ({
+    id: Number(r.id),
+    complaint: r.complaint,
+    status: r.status,
+    startedAt: iso(r.started_at),
+    resolvedAt: iso(r.resolved_at),
+    doctorName: r.doctor_name,
+    unreadCount: r.unread_count,
+  }));
+}
+
+/** History for a known patient id. Never throws: without it, the interview carries on. */
+export async function loadPatientHistory(patientId) {
+  try {
+    return await getPatientHistory({ patientId });
+  } catch (err) {
+    console.warn('History unavailable:', err.message);
+    return null;
+  }
 }
 
 /** Saves the AI summary and moves the case to the doctor queue, or marks it escalated. */
@@ -295,7 +346,7 @@ export async function getVisit(visitId) {
   if (rows.length === 0) return null;
   const v = rows[0];
   const [messages, prescriptions, orders] = await Promise.all([
-    db.query('SELECT sender, kind, text, sent_at FROM visit_messages WHERE visit_id = $1 ORDER BY sent_at, id', [visitId]),
+    db.query('SELECT sender, kind, text, options, sent_at FROM visit_messages WHERE visit_id = $1 ORDER BY sent_at, id', [visitId]),
     db.query(
       `SELECT p.*, d.name AS doctor_name FROM prescriptions p JOIN doctors d ON d.id = p.doctor_id
        WHERE p.visit_id = $1 ORDER BY p.prescribed_at, p.id`,
@@ -324,7 +375,8 @@ export async function getVisit(visitId) {
     ctasOverrideReason: v.ctas_override_reason,
     redFlags: v.red_flags,
     soap: v.soap,
-    messages: messages.rows.map((m) => ({ from: m.sender, kind: m.kind, text: m.text, sentAt: iso(m.sent_at) })),
+    premadeAnswers: v.premade_answers,
+    messages: messages.rows.map((m) => ({ from: m.sender, kind: m.kind, text: m.text, options: m.options, sentAt: iso(m.sent_at) })),
     prescriptions: prescriptions.rows.map((p) => ({
       medication: p.medication,
       dose: p.dose,

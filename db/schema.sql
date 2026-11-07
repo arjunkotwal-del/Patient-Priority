@@ -62,6 +62,10 @@ CREATE TABLE IF NOT EXISTS visit_messages (
   sent_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS visit_messages_visit_sent ON visit_messages (visit_id, sent_at, id);
+-- Tappable answers for an AI question, so the chat can be reloaded.
+ALTER TABLE visit_messages ADD COLUMN IF NOT EXISTS options TEXT[];
+-- The premade question answers given at check-in.
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS premade_answers JSONB NOT NULL DEFAULT '[]';
 
 CREATE TABLE IF NOT EXISTS prescriptions (
   id            BIGSERIAL PRIMARY KEY,

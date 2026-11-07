@@ -40,6 +40,8 @@ export interface Message {
   kind: 'question' | 'answer' | 'plan';
   /** ISO timestamp, set by the database. */
   sentAt?: string;
+  /** Tappable answers, only on AI questions. */
+  options?: string[] | null;
 }
 
 export type CaseStatus = 'interviewing' | 'waiting_for_doctor' | 'doctor_asked' | 'resolved' | 'escalated';
@@ -117,6 +119,7 @@ export interface VisitRecord {
   ctasOverrideReason: string | null;
   redFlags: string[];
   soap: TriageResult['soap'] | null;
+  premadeAnswers: QuestionAnswer[];
   messages: Message[];
   prescriptions: Prescription[];
   orders: Order[];
