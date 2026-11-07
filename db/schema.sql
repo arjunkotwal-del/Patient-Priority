@@ -53,6 +53,9 @@ ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS patient_read_at TIMESTAMPTZ;
 ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS doctor_read_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS past_visits_patient_date ON past_visits (patient_id, visit_date DESC);
+-- Queue priority for minor cases (high, medium, low) and why, from keyword rules plus the AI.
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS priority TEXT CHECK (priority IN ('high', 'medium', 'low'));
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS priority_reasons TEXT[] NOT NULL DEFAULT '{}';
 DROP INDEX IF EXISTS past_visits_queue;
 CREATE INDEX IF NOT EXISTS past_visits_queue_wait ON past_visits (status, started_at);
 CREATE INDEX IF NOT EXISTS past_visits_patient_started ON past_visits (patient_id, started_at DESC);

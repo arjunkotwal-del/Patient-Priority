@@ -11,6 +11,8 @@ export const DEMO_OPEN_CASES = [
     complaint: 'Ear pain',
     minutesAgo: 25,
     suggestedCtas: 4,
+    priority: 'high',
+    priorityReasons: ['AI rated medium: Moderate one-sided ear pain', 'Keyword: Getting worse'],
     soap: {
       subjective: 'Right ear pain since yesterday, pain 5/10, getting worse. Denies fever and ear discharge. Allergies: sulfa drugs, latex.',
       assessment: 'Worsening one-sided ear pain with no reported red flags. Presents as minor.',

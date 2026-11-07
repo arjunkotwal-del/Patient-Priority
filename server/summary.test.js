@@ -4,11 +4,14 @@ import { scanForRedFlags } from '../lib/redFlags.ts';
 import { parseTriageResult, runSummary } from './summary.js';
 
 const soap = { subjective: 's', assessment: 'a', plan: 'p' };
-const minor = { escalate: false, redFlags: [], suggestedCtas: 5, soap };
+// What Gemini returns, and what parseTriageResult turns it into.
+const minor = { escalate: false, redFlags: [], suggestedCtas: 5, priority: 'low', priorityReason: 'Mild', soap };
+const parsedMinor = { escalate: false, redFlags: [], suggestedCtas: 5, aiPriority: 'low', priorityReason: 'Mild', soap };
 const parse = (value) => parseTriageResult(JSON.stringify(value));
 
 describe('parseTriageResult', () => {
-  it('accepts a minor case', () => assert.deepEqual(parse(minor), minor));
+  it('accepts a minor case', () => assert.deepEqual(parse(minor), parsedMinor));
+  it('rejects an unknown priority', () => assert.equal(parse({ ...minor, priority: 'urgent' }), null));
   it('rejects bad JSON', () => assert.equal(parseTriageResult('nope'), null));
   it('rejects a CTAS outside 3 to 5', () => assert.equal(parse({ ...minor, suggestedCtas: 1 }), null));
   it('rejects an empty SOAP field', () => assert.equal(parse({ ...minor, soap: { ...soap, plan: ' ' } }), null));
@@ -43,7 +46,15 @@ describe('runSummary', () => {
 
   it('returns the SOAP note for a minor case', async () => {
     stub(minor);
-    assert.deepEqual(await runSummary(input), minor);
+    assert.deepEqual(await runSummary(input), {
+      escalate: false, redFlags: [], suggestedCtas: 5, priority: 'low', priorityReasons: ['AI rated low: Mild'], soap,
+    });
+  });
+  it('lets a keyword raise the AI priority', async () => {
+    stub(minor);
+    const result = await runSummary({ ...input, transcript: [{ question: 'Better or worse?', answer: 'getting worse' }] });
+    assert.equal(result.priority, 'high');
+    assert.ok(result.priorityReasons.includes('Keyword: Getting worse'));
   });
   it('lets the rules win without calling Gemini', async () => {
     stub(minor);

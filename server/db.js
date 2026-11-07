@@ -183,10 +183,10 @@ export async function loadPatientHistory(patientId) {
 }
 
 /** Saves the AI summary and moves the case to the doctor queue, or marks it escalated. */
-export async function saveTriage(visitId, { escalate, redFlags, suggestedCtas, soap }) {
+export async function saveTriage(visitId, { escalate, redFlags, suggestedCtas, soap, priority = null, priorityReasons = [] }) {
   await requirePool().query(
-    `UPDATE past_visits SET status = $2, red_flags = $3, suggested_ctas = $4, soap = $5 WHERE id = $1`,
-    [visitId, escalate ? 'escalated' : 'waiting_for_doctor', redFlags, suggestedCtas, escalate ? null : soap],
+    `UPDATE past_visits SET status = $2, red_flags = $3, suggested_ctas = $4, soap = $5, priority = $6, priority_reasons = $7 WHERE id = $1`,
+    [visitId, escalate ? 'escalated' : 'waiting_for_doctor', redFlags, suggestedCtas, escalate ? null : soap, priority, priorityReasons],
   );
 }
 
@@ -345,13 +345,13 @@ export async function claimVisit(visitId, doctorId) {
 }
 
 /**
- * Cases waiting for the doctor's answer, first come first served. The AI only gathers
- * information: its suggested CTAS is shown as a label for the doctor to confirm, and
- * never changes anyone's place in line.
+ * Cases waiting for the doctor's answer: high priority first, then medium, then low, and
+ * the longest wait first within each. Priority comes from keyword rules plus the AI's
+ * rating (see lib/priority.ts), and the reasons go to the doctor.
  */
 export async function getQueue() {
   const { rows } = await requirePool().query(
-    `SELECT v.id, v.patient_id, v.complaint, v.status, v.suggested_ctas, v.started_at,
+    `SELECT v.id, v.patient_id, v.complaint, v.status, v.suggested_ctas, v.priority, v.priority_reasons, v.started_at,
             floor(extract(epoch FROM now() - v.started_at) / 60)::int AS waiting_minutes,
             v.assigned_doctor_id, d.name AS assigned_doctor_name,
             (SELECT count(*)::int FROM visit_messages m
@@ -359,7 +359,7 @@ export async function getQueue() {
                AND (v.doctor_read_at IS NULL OR m.sent_at > v.doctor_read_at)) AS unread_for_doctor
      FROM past_visits v LEFT JOIN doctors d ON d.id = v.assigned_doctor_id
      WHERE v.status = 'waiting_for_doctor'
-     ORDER BY v.started_at ASC, v.id ASC`,
+     ORDER BY CASE v.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 2 END, v.started_at ASC, v.id ASC`,
   );
   return rows.map((r) => ({
     visitId: Number(r.id),
@@ -367,6 +367,8 @@ export async function getQueue() {
     complaint: r.complaint,
     status: r.status,
     suggestedCtas: r.suggested_ctas,
+    priority: r.priority ?? 'medium',
+    priorityReasons: r.priority_reasons,
     startedAt: iso(r.started_at),
     waitingMinutes: r.waiting_minutes,
     assignedDoctor: r.assigned_doctor_id ? { id: r.assigned_doctor_id, name: r.assigned_doctor_name } : null,
@@ -480,6 +482,8 @@ export async function getVisit(visitId) {
     summary: v.summary,
     plan: v.plan,
     suggestedCtas: v.suggested_ctas,
+    priority: v.priority,
+    priorityReasons: v.priority_reasons,
     confirmedCtas: v.confirmed_ctas,
     ctasOverrideReason: v.ctas_override_reason,
     redFlags: v.red_flags,

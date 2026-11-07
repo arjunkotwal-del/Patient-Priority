@@ -133,7 +133,7 @@ Every doctor route except `GET /api/doctor/me` returns `403 forbidden` for anyon
 | Route | Body | Returns |
 |---|---|---|
 | `GET /api/doctor/me` | | `{ doctor: { id, name } }` or `{ doctor: null }`. Open to every login: the app uses it to pick the doctor or patient side |
-| `GET /api/doctor/queue` | | `{ queue: QueueItem[] }`: cases waiting for an answer, first come first served (longest wait first). The AI's `suggestedCtas` is only a label for the doctor to confirm; it never changes the order |
+| `GET /api/doctor/queue` | | `{ queue: QueueItem[] }`: cases waiting for an answer, high priority first, then medium, then low, longest wait first within each |
 | `GET /api/doctor/appointments` | | `{ appointments: [...] }`: in-person appointments offered or booked, soonest first |
 | `POST /api/doctor/visits/:id/claim` | | `{ ok: true }`, or `409 claimed_by_other` |
 | `GET /api/doctor/visits/:id` | | `{ visit, notes, history }` (also marks it read for the doctor) |
@@ -169,9 +169,19 @@ Only works on a `waiting_for_doctor` case.
 `QueueItem`:
 ```json
 { "visitId": 12, "patientId": "p_...", "complaint": "Ear pain", "status": "waiting_for_doctor",
-  "suggestedCtas": 4, "startedAt": "...", "waitingMinutes": 25,
+  "suggestedCtas": 4, "priority": "high", "priorityReasons": ["AI rated medium: Moderate one-sided ear pain", "Keyword: Getting worse"],
+  "startedAt": "...", "waitingMinutes": 25,
   "assignedDoctor": { "id": "demo-dr-rivera", "name": "Dr. Sam Rivera (demo)" }, "unreadForDoctor": 2 }
 ```
+
+**How priority is decided** (`lib/priority.ts`), two layers like the safety check:
+1. The AI rates the finished interview `high`, `medium` or `low`, with a short reason.
+2. Keyword rules can only raise it: "getting worse", "fever", "severe pain", "can't eat or sleep", "pregnant" or a
+   pain score of 7+ make it `high`. Pain 4 to 6 makes it at least `medium`. Whether a condition in the history
+   (like diabetes) matters is left to the AI, because it depends on the complaint.
+   Negation is understood, so "no fever" doesn't count.
+
+Show `priorityReasons` on the doctor's queue so they can see why. Patients never see priority.
 
 The case view's `visit` has everything: `soap` (the AI summary: `subjective`, `assessment`, `plan`), `suggestedCtas`,
 `redFlags`, `premadeAnswers`, `messages`, `prescriptions`, `orders`, `appointment`.

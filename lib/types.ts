@@ -83,6 +83,9 @@ export interface QueueItem {
   complaint: string;
   status: 'waiting_for_doctor';
   suggestedCtas: number | null;
+  /** From keyword rules plus the AI's rating. Doctors only. */
+  priority: 'high' | 'medium' | 'low';
+  priorityReasons: string[];
   startedAt: string;
   waitingMinutes: number;
   assignedDoctor: { id: string; name: string } | null;
@@ -127,6 +130,8 @@ export interface VisitRecord {
   summary: string | null;
   plan: string | null;
   suggestedCtas: number | null;
+  priority: 'high' | 'medium' | 'low' | null;
+  priorityReasons: string[];
   confirmedCtas: number | null;
   ctasOverrideReason: string | null;
   redFlags: string[];

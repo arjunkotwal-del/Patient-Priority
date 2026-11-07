@@ -4,7 +4,7 @@
 // login, and every open or change is written to the access log.
 //
 //   GET  /api/doctor/me                      { doctor: { id, name } } or { doctor: null }: which side of the app to show
-//   GET  /api/doctor/queue                   cases waiting for an answer, longest wait first
+//   GET  /api/doctor/queue                   cases waiting for an answer: high, medium, low priority
 //   GET  /api/doctor/appointments            in-person appointments offered or booked
 //   POST /api/doctor/visits/:id/claim        take a case
 //   GET  /api/doctor/visits/:id              full case: chat, summary, history, notes

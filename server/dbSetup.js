@@ -78,10 +78,10 @@ try {
   // Open cases are timed relative to now, so they always look freshly waiting.
   for (const c of DEMO_OPEN_CASES) {
     const { rows } = await client.query(
-      `INSERT INTO past_visits (patient_id, complaint, status, suggested_ctas, soap, started_at)
-       VALUES ($1, $2, 'waiting_for_doctor', $3, $4, now() - make_interval(mins => $5))
+      `INSERT INTO past_visits (patient_id, complaint, status, suggested_ctas, soap, priority, priority_reasons, started_at)
+       VALUES ($1, $2, 'waiting_for_doctor', $3, $4, $6, $7, now() - make_interval(mins => $5))
        RETURNING id, started_at`,
-      [c.patientId, c.complaint, c.suggestedCtas, c.soap, c.minutesAgo],
+      [c.patientId, c.complaint, c.suggestedCtas, c.soap, c.minutesAgo, c.priority, c.priorityReasons],
     );
     const { id, started_at: startedAt } = rows[0];
     for (const [minutes, sender, kind, text] of c.messages) {
