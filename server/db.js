@@ -121,13 +121,115 @@ export async function addPrescription(visitId, doctorId, { medication, dose, fre
 }
 
 /** Closes the case. It then shows up in the patient's history for future visits. */
-export async function resolveVisit(visitId, { doctorId, diagnosis, summary, plan, confirmedCtas = null }) {
+export async function resolveVisit(visitId, { doctorId, diagnosis, summary, plan, confirmedCtas = null, ctasOverrideReason = null }) {
   await requirePool().query(
     `UPDATE past_visits
-     SET status = 'resolved', doctor_id = $2, diagnosis = $3, summary = $4, plan = $5, confirmed_ctas = $6, resolved_at = now()
+     SET status = 'resolved', doctor_id = $2, diagnosis = $3, summary = $4, plan = $5, confirmed_ctas = $6,
+         ctas_override_reason = $7, resolved_at = now()
      WHERE id = $1`,
-    [visitId, doctorId, diagnosis, summary, plan, confirmedCtas],
+    [visitId, doctorId, diagnosis, summary, plan, confirmedCtas, ctasOverrideReason],
   );
+}
+
+/** Saves a test, imaging study or referral. type is "lab", "imaging", "referral" or "other". */
+export async function addOrder(visitId, doctorId, { type, name, instructions = '' }) {
+  await requirePool().query('INSERT INTO orders (visit_id, doctor_id, type, name, instructions) VALUES ($1, $2, $3, $4, $5)', [
+    visitId,
+    doctorId,
+    type,
+    name,
+    instructions,
+  ]);
+}
+
+/**
+ * A doctor takes a case. Returns true if they now have it, false if another doctor
+ * already does or the case is no longer waiting. Claiming your own case again is fine.
+ */
+export async function claimVisit(visitId, doctorId) {
+  const { rowCount } = await requirePool().query(
+    `UPDATE past_visits SET assigned_doctor_id = $2, assigned_at = COALESCE(assigned_at, now())
+     WHERE id = $1 AND status IN ('waiting_for_doctor', 'doctor_asked')
+       AND (assigned_doctor_id IS NULL OR assigned_doctor_id = $2)`,
+    [visitId, doctorId],
+  );
+  return rowCount === 1;
+}
+
+/** Open cases for the doctor dashboard: most urgent CTAS first, then longest wait. */
+export async function getQueue() {
+  const { rows } = await requirePool().query(
+    `SELECT v.id, v.patient_id, v.complaint, v.status, v.suggested_ctas, v.started_at,
+            floor(extract(epoch FROM now() - v.started_at) / 60)::int AS waiting_minutes,
+            v.assigned_doctor_id, d.name AS assigned_doctor_name,
+            (SELECT count(*)::int FROM visit_messages m
+             WHERE m.visit_id = v.id AND m.sender = 'patient'
+               AND (v.doctor_read_at IS NULL OR m.sent_at > v.doctor_read_at)) AS unread_for_doctor
+     FROM past_visits v LEFT JOIN doctors d ON d.id = v.assigned_doctor_id
+     WHERE v.status IN ('waiting_for_doctor', 'doctor_asked')
+     ORDER BY v.suggested_ctas ASC NULLS LAST, v.started_at ASC`,
+  );
+  return rows.map((r) => ({
+    visitId: Number(r.id),
+    patientId: r.patient_id,
+    complaint: r.complaint,
+    status: r.status,
+    suggestedCtas: r.suggested_ctas,
+    startedAt: iso(r.started_at),
+    waitingMinutes: r.waiting_minutes,
+    assignedDoctor: r.assigned_doctor_id ? { id: r.assigned_doctor_id, name: r.assigned_doctor_name } : null,
+    unreadForDoctor: r.unread_for_doctor,
+  }));
+}
+
+const READ_COLUMN = { patient: 'patient_read_at', doctor: 'doctor_read_at' };
+// Each side's unread messages are the ones the other side sent.
+const OTHER_SENDER = { patient: 'doctor', doctor: 'patient' };
+
+/** Marks everything in a visit as read for "patient" or "doctor". */
+export async function markRead(visitId, who) {
+  const column = READ_COLUMN[who];
+  if (!column) throw new Error(`Unknown reader: ${who}`);
+  await requirePool().query(`UPDATE past_visits SET ${column} = now() WHERE id = $1`, [visitId]);
+}
+
+/** How many messages "patient" or "doctor" hasn't read yet in a visit. */
+export async function getUnreadCount(visitId, who) {
+  const column = READ_COLUMN[who];
+  if (!column) throw new Error(`Unknown reader: ${who}`);
+  const { rows } = await requirePool().query(
+    `SELECT count(*)::int AS unread FROM visit_messages m JOIN past_visits v ON v.id = m.visit_id
+     WHERE m.visit_id = $1 AND m.sender = $2 AND (v.${column} IS NULL OR m.sent_at > v.${column})`,
+    [visitId, OTHER_SENDER[who]],
+  );
+  return rows[0].unread;
+}
+
+/**
+ * Cuts a full visit down to what the patient may see. Leaves out the SOAP note, red flags,
+ * CTAS levels, the clinical summary and anything else for staff only.
+ */
+export function toPatientView(visit, unreadCount = 0) {
+  return {
+    id: visit.id,
+    status: visit.status,
+    complaint: visit.complaint,
+    startedAt: visit.startedAt,
+    resolvedAt: visit.resolvedAt,
+    doctorName: visit.doctor?.name ?? visit.assignedDoctor?.name ?? null,
+    diagnosis: visit.diagnosis,
+    plan: visit.plan,
+    messages: visit.messages,
+    prescriptions: visit.prescriptions,
+    orders: visit.orders,
+    unreadCount,
+  };
+}
+
+/** The patient-safe view of a visit, or null if it doesn't exist. */
+export async function getPatientView(visitId) {
+  const visit = await getVisit(visitId);
+  return visit && toPatientView(visit, await getUnreadCount(visitId, 'patient'));
 }
 
 /** Saves a private note. Doctors only: never show these to the patient or send them to the AI. */
@@ -149,16 +251,25 @@ export async function getDoctorNotes(visitId) {
 export async function getVisit(visitId) {
   const db = requirePool();
   const { rows } = await db.query(
-    `SELECT v.*, d.name AS doctor_name FROM past_visits v LEFT JOIN doctors d ON d.id = v.doctor_id WHERE v.id = $1`,
+    `SELECT v.*, d.name AS doctor_name, a.name AS assigned_doctor_name
+     FROM past_visits v
+     LEFT JOIN doctors d ON d.id = v.doctor_id
+     LEFT JOIN doctors a ON a.id = v.assigned_doctor_id
+     WHERE v.id = $1`,
     [visitId],
   );
   if (rows.length === 0) return null;
   const v = rows[0];
-  const [messages, prescriptions] = await Promise.all([
+  const [messages, prescriptions, orders] = await Promise.all([
     db.query('SELECT sender, kind, text, sent_at FROM visit_messages WHERE visit_id = $1 ORDER BY sent_at, id', [visitId]),
     db.query(
       `SELECT p.*, d.name AS doctor_name FROM prescriptions p JOIN doctors d ON d.id = p.doctor_id
        WHERE p.visit_id = $1 ORDER BY p.prescribed_at, p.id`,
+      [visitId],
+    ),
+    db.query(
+      `SELECT o.*, d.name AS doctor_name FROM orders o JOIN doctors d ON d.id = o.doctor_id
+       WHERE o.visit_id = $1 ORDER BY o.ordered_at, o.id`,
       [visitId],
     ),
   ]);
@@ -170,11 +281,13 @@ export async function getVisit(visitId) {
     startedAt: iso(v.started_at),
     resolvedAt: iso(v.resolved_at),
     doctor: v.doctor_id ? { id: v.doctor_id, name: v.doctor_name } : null,
+    assignedDoctor: v.assigned_doctor_id ? { id: v.assigned_doctor_id, name: v.assigned_doctor_name } : null,
     diagnosis: v.diagnosis,
     summary: v.summary,
     plan: v.plan,
     suggestedCtas: v.suggested_ctas,
     confirmedCtas: v.confirmed_ctas,
+    ctasOverrideReason: v.ctas_override_reason,
     redFlags: v.red_flags,
     soap: v.soap,
     messages: messages.rows.map((m) => ({ from: m.sender, kind: m.kind, text: m.text, sentAt: iso(m.sent_at) })),
@@ -186,6 +299,13 @@ export async function getVisit(visitId) {
       instructions: p.instructions,
       prescribedAt: iso(p.prescribed_at),
       doctorName: p.doctor_name,
+    })),
+    orders: orders.rows.map((o) => ({
+      type: o.type,
+      name: o.name,
+      instructions: o.instructions,
+      orderedAt: iso(o.ordered_at),
+      doctorName: o.doctor_name,
     })),
   };
 }
