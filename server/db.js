@@ -344,7 +344,11 @@ export async function claimVisit(visitId, doctorId) {
   return rowCount === 1;
 }
 
-/** Cases waiting for the doctor's answer: most urgent CTAS first, then longest wait. */
+/**
+ * Cases waiting for the doctor's answer, first come first served. The AI only gathers
+ * information: its suggested CTAS is shown as a label for the doctor to confirm, and
+ * never changes anyone's place in line.
+ */
 export async function getQueue() {
   const { rows } = await requirePool().query(
     `SELECT v.id, v.patient_id, v.complaint, v.status, v.suggested_ctas, v.started_at,
@@ -355,7 +359,7 @@ export async function getQueue() {
                AND (v.doctor_read_at IS NULL OR m.sent_at > v.doctor_read_at)) AS unread_for_doctor
      FROM past_visits v LEFT JOIN doctors d ON d.id = v.assigned_doctor_id
      WHERE v.status = 'waiting_for_doctor'
-     ORDER BY v.suggested_ctas ASC NULLS LAST, v.started_at ASC`,
+     ORDER BY v.started_at ASC, v.id ASC`,
   );
   return rows.map((r) => ({
     visitId: Number(r.id),

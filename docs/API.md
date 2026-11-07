@@ -133,7 +133,7 @@ Every doctor route except `GET /api/doctor/me` returns `403 forbidden` for anyon
 | Route | Body | Returns |
 |---|---|---|
 | `GET /api/doctor/me` | | `{ doctor: { id, name } }` or `{ doctor: null }`. Open to every login: the app uses it to pick the doctor or patient side |
-| `GET /api/doctor/queue` | | `{ queue: QueueItem[] }`: cases waiting for an answer, most urgent CTAS first, then longest wait |
+| `GET /api/doctor/queue` | | `{ queue: QueueItem[] }`: cases waiting for an answer, first come first served (longest wait first). The AI's `suggestedCtas` is only a label for the doctor to confirm; it never changes the order |
 | `GET /api/doctor/appointments` | | `{ appointments: [...] }`: in-person appointments offered or booked, soonest first |
 | `POST /api/doctor/visits/:id/claim` | | `{ ok: true }`, or `409 claimed_by_other` |
 | `GET /api/doctor/visits/:id` | | `{ visit, notes, history }` (also marks it read for the doctor) |

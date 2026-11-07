@@ -53,7 +53,8 @@ ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS patient_read_at TIMESTAMPTZ;
 ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS doctor_read_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS past_visits_patient_date ON past_visits (patient_id, visit_date DESC);
-CREATE INDEX IF NOT EXISTS past_visits_queue ON past_visits (status, suggested_ctas, started_at);
+DROP INDEX IF EXISTS past_visits_queue;
+CREATE INDEX IF NOT EXISTS past_visits_queue_wait ON past_visits (status, started_at);
 CREATE INDEX IF NOT EXISTS past_visits_patient_started ON past_visits (patient_id, started_at DESC);
 
 -- Every message in a visit: the AI interview, then the doctor's one reply or appointment offer.
