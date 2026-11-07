@@ -39,7 +39,17 @@ ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS soap JSONB;
 ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
 
+-- A doctor claims a case so two doctors don't answer the same patient.
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS assigned_doctor_id TEXT REFERENCES doctors(id);
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ;
+-- Why the doctor changed the AI's suggested CTAS, if they did.
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS ctas_override_reason TEXT;
+-- Anything newer than these counts as unread for that side.
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS patient_read_at TIMESTAMPTZ;
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS doctor_read_at TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS past_visits_patient_date ON past_visits (patient_id, visit_date DESC);
+CREATE INDEX IF NOT EXISTS past_visits_queue ON past_visits (status, suggested_ctas, started_at);
 CREATE INDEX IF NOT EXISTS past_visits_patient_started ON past_visits (patient_id, started_at DESC);
 
 -- Every message in a visit: AI questions, patient answers, doctor questions and plans.
@@ -65,6 +75,18 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   prescribed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS prescriptions_visit ON prescriptions (visit_id);
+
+-- Tests, imaging and referrals the doctor orders.
+CREATE TABLE IF NOT EXISTS orders (
+  id           BIGSERIAL PRIMARY KEY,
+  visit_id     BIGINT NOT NULL REFERENCES past_visits(id) ON DELETE CASCADE,
+  doctor_id    TEXT NOT NULL REFERENCES doctors(id),
+  type         TEXT NOT NULL CHECK (type IN ('lab', 'imaging', 'referral', 'other')),
+  name         TEXT NOT NULL,
+  instructions TEXT NOT NULL DEFAULT '',
+  ordered_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS orders_visit ON orders (visit_id);
 
 -- Private notes for doctors only. Never shown to the patient or sent to the AI.
 CREATE TABLE IF NOT EXISTS doctor_notes (

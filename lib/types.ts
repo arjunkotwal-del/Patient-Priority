@@ -54,6 +54,44 @@ export interface Prescription {
   doctorName: string;
 }
 
+/** A test, imaging study or referral ordered by the doctor. */
+export interface Order {
+  type: 'lab' | 'imaging' | 'referral' | 'other';
+  name: string;
+  instructions: string;
+  orderedAt: string;
+  doctorName: string;
+}
+
+/** One case in the doctor queue. */
+export interface QueueItem {
+  visitId: number;
+  patientId: string;
+  complaint: string;
+  status: 'waiting_for_doctor' | 'doctor_asked';
+  suggestedCtas: number | null;
+  startedAt: string;
+  waitingMinutes: number;
+  assignedDoctor: { id: string; name: string } | null;
+  unreadForDoctor: number;
+}
+
+/** What a patient may see about their own visit. No SOAP note, red flags, CTAS or doctor notes. */
+export interface PatientVisitView {
+  id: number;
+  status: CaseStatus;
+  complaint: string;
+  startedAt: string;
+  resolvedAt: string | null;
+  doctorName: string | null;
+  diagnosis: string | null;
+  plan: string | null;
+  messages: Message[];
+  prescriptions: Prescription[];
+  orders: Order[];
+  unreadCount: number;
+}
+
 /** A private note for doctors only. Never send these to the patient or the AI. */
 export interface DoctorNote {
   text: string;
@@ -70,15 +108,18 @@ export interface VisitRecord {
   startedAt: string;
   resolvedAt: string | null;
   doctor: { id: string; name: string } | null;
+  assignedDoctor: { id: string; name: string } | null;
   diagnosis: string | null;
   summary: string | null;
   plan: string | null;
   suggestedCtas: number | null;
   confirmedCtas: number | null;
+  ctasOverrideReason: string | null;
   redFlags: string[];
   soap: TriageResult['soap'] | null;
   messages: Message[];
   prescriptions: Prescription[];
+  orders: Order[];
 }
 
 export interface QuestionAnswer {
