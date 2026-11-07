@@ -1,12 +1,44 @@
-import type { PatientHistory } from './types.ts';
+import type { PastVisit, PatientHistory } from './types.ts';
 
 const RECENT_VISITS = 3;
 const list = (items: string[]) => (items.length ? items.join(', ') : 'none on file');
 
-/** Sends Gemini only allergies, meds, conditions and the last 3 visits. */
-export function formatHistoryForPrompt(history: PatientHistory | null | undefined): string {
+// Body areas, checked in this order so "rash on my leg" counts as skin, not a limb injury.
+const BODY_AREAS: [string, RegExp][] = [
+  ['skin', /\b(rash\w*|hives|itch\w*|skin|bite)\b/],
+  ['wound', /\b(cut|laceration|wound|burn\w*)\b/],
+  ['eye', /\b(eyes?|vision)\b/],
+  ['ear', /\b(ears?|earache)\b/],
+  ['throat', /\b(throat|tonsils?|swallow\w*)\b/],
+  ['urinary', /\b(urin\w*|pee\w*|bladder|uti)\b/],
+  ['stomach', /\b(stomach|abdom\w*|belly|vomit\w*|diarrh\w*|nausea)\b/],
+  ['head', /\b(head|headaches?|migraines?)\b/],
+  ['limb', /\b(ankles?|foot|feet|knees?|legs?|wrists?|arms?|hands?|fingers?|toes?|sprain\w*|shoulders?|elbows?)\b/],
+];
+
+/** The body area a complaint is about, or null if it doesn't clearly match one. */
+export function bodyArea(text: string): string | null {
+  const lower = text.toLowerCase();
+  return BODY_AREAS.find(([, pattern]) => pattern.test(lower))?.[0] ?? null;
+}
+
+/**
+ * Past visits about the same body area as today's complaint. Decided in code, not by the
+ * AI, because the AI kept linking unrelated visits (a sore throat to a rash).
+ */
+export function findRelatedVisits(complaint: string, history: PatientHistory | null | undefined): PastVisit[] {
+  const area = bodyArea(complaint);
+  if (!area || !history) return [];
+  return history.pastVisits.filter((v) => bodyArea(v.complaint) === area);
+}
+
+/**
+ * Sends Gemini only allergies, meds, conditions and the last 3 visits. Pass `visits`
+ * to send a chosen set instead, such as only the related ones.
+ */
+export function formatHistoryForPrompt(history: PatientHistory | null | undefined, visitsToShow?: PastVisit[]): string {
   if (!history) return 'No history on file. This may be a new patient.';
-  const visits = [...history.pastVisits]
+  const visits = [...(visitsToShow ?? history.pastVisits)]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, RECENT_VISITS)
     .map((v) => {

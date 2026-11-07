@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "start": "node server.js",
-    "test": "node --test --test-timeout=10000 server/*.test.js",
+    "test": "node --test --test-timeout=10000 server/*.test.js lib/*.test.js",
     "db:setup": "node server/dbSetup.js"
   },
   "dependencies": {

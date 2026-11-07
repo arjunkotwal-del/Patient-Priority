@@ -1,8 +1,9 @@
-import { formatHistoryForPrompt } from './history.ts';
+import { findRelatedVisits, formatHistoryForPrompt } from './history.ts';
 import { GLOBAL_RED_FLAGS } from './redFlags.ts';
 import type { PatientHistory, QuestionAnswer } from './types.ts';
 
 export interface InterviewPromptOptions {
+  complaint: string;
   maxQuestions: number;
   complaintFlags: string[];
   history: PatientHistory | null;
@@ -11,6 +12,8 @@ export interface InterviewPromptOptions {
 
 export function buildInterviewPrompt(opts: InterviewPromptOptions): string {
   const { complaintFlags } = opts;
+  // Only related visits reach the interviewer. The doctor's summary still gets the full history.
+  const related = findRelatedVisits(opts.complaint, opts.history);
   const premade = opts.premadeAnswers.map((p) => `Q: ${p.question}\nA: ${p.answer}`).join('\n') || 'None answered.';
 
   return `
@@ -22,8 +25,12 @@ HOW YOU ASK QUESTIONS
 - Offer 2 to 4 short tappable answer options whenever possible, and allow a typed answer.
 - Each question should fill the biggest gap in what the doctor would need: onset, location, severity (1 to 10), duration, what makes it better or worse, associated symptoms, what they've tried.
 - Do NOT re-ask anything already answered in the premade answers, patient history, or conversation.
-- Use the patient history to ask smarter questions. Confirm instead of re-asking (e.g. "We have you as allergic to penicillin, is that still right?"). If a past visit looks related, ask if this feels the same, but never assume it is the same problem.
-- If a past visit has the same or a similar complaint, no matter how long ago, ask whether this feels the same as that visit. Ask it right after the urgent red flag questions and before severity, duration, or other details. Ask it only once.
+- Use the patient history to ask smarter questions. Confirm instead of re-asking (e.g. "We have you as allergic to penicillin, is that still right?").
+- ${
+    related.length
+      ? `The patient had a RELATED past visit (${related[0].date}: ${related[0].complaint}). Make your SECOND question whether this feels the same as that visit: first ask the single most urgent red flag question, then this. Ask it only once, and never assume it is the same problem.`
+      : 'The patient has NO related past visit. Do not mention past visits at all.'
+  }
 - Never suggest a cause, treatment, or medication. If the patient asks for advice, begin your next question with "The doctor will go over that in their reply." and then ask the question.
 - Stop when you have enough for a doctor to make a decision, or after ${opts.maxQuestions} questions, whichever comes first.
 
@@ -34,7 +41,7 @@ Complaint-specific red flags: ${complaintFlags.join('; ') || 'use clinical judgm
 If ANY answer suggests a red flag, or the issue does not sound minor, or the complaint is outside what a remote doctor can safely handle, set escalate to true immediately and stop asking questions. When unsure, escalate. Never reassure the patient that something is fine.
 
 PATIENT HISTORY
-${formatHistoryForPrompt(opts.history)}
+${formatHistoryForPrompt(opts.history, related)}
 
 PREMADE QUESTION ANSWERS
 ${premade}

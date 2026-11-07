@@ -132,6 +132,7 @@ export async function runInterviewTurn(input) {
 
   const finalTurn = transcript.length >= MAX_QUESTIONS;
   const systemPrompt = buildInterviewPrompt({
+    complaint,
     maxQuestions: MAX_QUESTIONS,
     complaintFlags: getComplaintFlags(complaint),
     history,
