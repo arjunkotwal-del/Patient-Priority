@@ -1,4 +1,5 @@
--- Patient medical history. Safe to run more than once.
+-- Patient medical history. Safe to run more than once: it only adds what is missing.
+
 CREATE TABLE IF NOT EXISTS patients (
   id            TEXT PRIMARY KEY,
   auth0_user_id TEXT UNIQUE,
@@ -7,6 +8,14 @@ CREATE TABLE IF NOT EXISTS patients (
   conditions    TEXT[] NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS doctors (
+  id             TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  license_number TEXT,
+  auth0_user_id  TEXT UNIQUE
+);
+
+-- One row per case, from check-in until the doctor resolves it.
 CREATE TABLE IF NOT EXISTS past_visits (
   id         BIGSERIAL PRIMARY KEY,
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
@@ -16,4 +25,43 @@ CREATE TABLE IF NOT EXISTS past_visits (
   plan       TEXT NOT NULL
 );
 
+ALTER TABLE past_visits ALTER COLUMN visit_date SET DEFAULT CURRENT_DATE;
+ALTER TABLE past_visits ALTER COLUMN summary DROP NOT NULL;
+ALTER TABLE past_visits ALTER COLUMN plan DROP NOT NULL;
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'resolved'
+  CHECK (status IN ('interviewing', 'waiting_for_doctor', 'doctor_asked', 'resolved', 'escalated'));
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS doctor_id TEXT REFERENCES doctors(id);
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS diagnosis TEXT;
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS suggested_ctas SMALLINT CHECK (suggested_ctas BETWEEN 1 AND 5);
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS confirmed_ctas SMALLINT CHECK (confirmed_ctas BETWEEN 1 AND 5);
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS red_flags TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS soap JSONB;
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS past_visits_patient_date ON past_visits (patient_id, visit_date DESC);
+CREATE INDEX IF NOT EXISTS past_visits_patient_started ON past_visits (patient_id, started_at DESC);
+
+-- Every message in a visit: AI questions, patient answers, doctor questions and plans.
+CREATE TABLE IF NOT EXISTS visit_messages (
+  id       BIGSERIAL PRIMARY KEY,
+  visit_id BIGINT NOT NULL REFERENCES past_visits(id) ON DELETE CASCADE,
+  sender   TEXT NOT NULL CHECK (sender IN ('patient', 'ai', 'doctor')),
+  kind     TEXT NOT NULL CHECK (kind IN ('question', 'answer', 'plan')),
+  text     TEXT NOT NULL,
+  sent_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS visit_messages_visit_sent ON visit_messages (visit_id, sent_at, id);
+
+CREATE TABLE IF NOT EXISTS prescriptions (
+  id            BIGSERIAL PRIMARY KEY,
+  visit_id      BIGINT NOT NULL REFERENCES past_visits(id) ON DELETE CASCADE,
+  doctor_id     TEXT NOT NULL REFERENCES doctors(id),
+  medication    TEXT NOT NULL,
+  dose          TEXT NOT NULL,
+  frequency     TEXT NOT NULL,
+  duration      TEXT NOT NULL,
+  instructions  TEXT NOT NULL DEFAULT '',
+  prescribed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS prescriptions_visit ON prescriptions (visit_id);
