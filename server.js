@@ -9,6 +9,7 @@ import { requireUser, getAppMetadata, findUsersByCardHash, setHealthCard } from 
 import { verifyOntarioCard } from './server/healthCard.js';
 import { encrypt, cardHash, checkKeys } from './server/secureStore.js';
 import { interviewHandler } from './server/interview.js';
+import { summaryHandler } from './server/summary.js';
 
 try {
   process.loadEnvFile('.env.local');
@@ -127,6 +128,7 @@ api.post('/verification', upload.single('card'), async (req, res, next) => {
 });
 
 api.post('/interview', express.json({ limit: '100kb' }), interviewHandler);
+api.post('/summary', express.json({ limit: '100kb' }), summaryHandler);
 
 app.use('/api', api);
 app.use('/api', (_req, res) => res.status(404).json({ code: 'not_found', message: 'Not found.' }));
