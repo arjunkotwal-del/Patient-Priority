@@ -12,6 +12,7 @@ import { interviewHandler } from './server/interview.js';
 import { summaryHandler } from './server/summary.js';
 import { chatScanHandler } from './server/chatScan.js';
 import { visitsRouter } from './server/visits.js';
+import { doctorRouter } from './server/doctor.js';
 
 try {
   process.loadEnvFile('.env.local');
@@ -133,6 +134,7 @@ api.post('/interview', express.json({ limit: '100kb' }), interviewHandler);
 api.post('/summary', express.json({ limit: '100kb' }), summaryHandler);
 api.post('/chat/scan', express.json({ limit: '100kb' }), chatScanHandler);
 api.use(visitsRouter);
+api.use(doctorRouter);
 
 app.use('/api', api);
 app.use('/api', (_req, res) => res.status(404).json({ code: 'not_found', message: 'Not found.' }));

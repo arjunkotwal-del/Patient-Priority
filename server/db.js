@@ -21,7 +21,12 @@ export function connectionOptions() {
 
 function getPool() {
   if (!process.env.DATABASE_URL) return null;
-  pool ??= new pg.Pool({ ...connectionOptions(), max: 5, connectionTimeoutMillis: 5000 });
+  if (!pool) {
+    pool = new pg.Pool({ ...connectionOptions(), max: 5, connectionTimeoutMillis: 5000 });
+    // The database closes idle connections now and then. Without this listener that error
+    // would crash the whole server; with it, the pool just opens a fresh connection next time.
+    pool.on('error', (err) => console.warn('Database connection dropped:', err.message));
+  }
   return pool;
 }
 
@@ -108,6 +113,12 @@ export async function getOrCreatePatientId(auth0UserId) {
     [`p_${randomUUID()}`, auth0UserId],
   );
   return rows[0].id;
+}
+
+/** The Auth0 login linked to a patient, or null (demo patients usually have none). */
+export async function getPatientAuth0Id(patientId) {
+  const { rows } = await requirePool().query('SELECT auth0_user_id FROM patients WHERE id = $1', [patientId]);
+  return rows[0]?.auth0_user_id ?? null;
 }
 
 /** Which patient a visit belongs to, or null if the visit doesn't exist. */

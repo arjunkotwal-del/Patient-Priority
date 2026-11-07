@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 export function LoginPage() {
   const { login, signup, error } = useAuth();
   const location = useLocation();
-  const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? '/medical';
+  const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? '/home';
   const [pending, setPending] = useState<'login' | 'signup' | null>(null);
 
   const go = (mode: 'login' | 'signup') => {

@@ -11,8 +11,23 @@ const CACHE = fileURLToPath(new URL('../.cache/tesseract', import.meta.url));
 let workerPromise = null;
 function getWorker() {
   // One shared worker; tesseract.js queues concurrent recognize() calls.
-  workerPromise ??= createWorker('eng', 1, { cachePath: CACHE, logger: () => {} });
+  // If starting it fails, forget it so the next scan tries again instead of failing forever.
+  workerPromise ??= createWorker('eng', 1, { cachePath: CACHE, logger: () => {} }).catch((err) => {
+    workerPromise = null;
+    throw err;
+  });
   return workerPromise;
+}
+
+/** Throws away a worker that failed mid-scan, so the next scan starts a fresh one. */
+async function resetWorker() {
+  const old = workerPromise;
+  workerPromise = null;
+  try {
+    await (await old)?.terminate();
+  } catch {
+    /* already gone */
+  }
 }
 
 /** Prepare a photo for OCR: honour EXIF rotation, upscale small images, boost contrast. */
@@ -143,7 +158,13 @@ export async function verifyOntarioCard(imageBuffer, firstName, lastName) {
 
   for (const angle of [0, 180, 90, 270]) {
     const img = await preprocess(imageBuffer, angle);
-    const { data } = await worker.recognize(img);
+    let data;
+    try {
+      ({ data } = await worker.recognize(img));
+    } catch (err) {
+      await resetWorker();
+      throw err;
+    }
     const text = data.text ?? '';
     const found = findHealthNumber(text);
     const card = looksLikeOntarioCard(text);

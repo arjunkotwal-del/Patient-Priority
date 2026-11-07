@@ -21,6 +21,12 @@ export type Verification =
       verifiedAt: string;
     };
 
+/** A doctor account, as linked in our database. */
+export interface Doctor {
+  id: string;
+  name: string;
+}
+
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
@@ -40,6 +46,11 @@ interface AuthContextValue {
   verificationError: string | null;
   refreshVerification: () => Promise<void>;
   setVerification: (v: Verification) => void;
+  /** The doctor record for this login, or null for patients. Checked by the server. */
+  doctor: Doctor | null;
+  /** True until we know whether this login is a doctor. */
+  doctorLoading: boolean;
+  doctorError: string | null;
 }
 
 const domain = import.meta.env.VITE_AUTH0_DOMAIN as string | undefined;
@@ -72,6 +83,9 @@ function AuthBridge({ children }: { children: ReactNode }) {
   const [verification, setVerification] = useState<Verification | null>(null);
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
+  // undefined = not checked yet for this login.
+  const [doctor, setDoctor] = useState<Doctor | null | undefined>(undefined);
+  const [doctorError, setDoctorError] = useState<string | null>(null);
 
   const id = auth0.isAuthenticated ? auth0.user?.sub : undefined;
   const { getAccessTokenSilently } = auth0;
@@ -109,6 +123,29 @@ function AuthBridge({ children }: { children: ReactNode }) {
     else setVerification(null);
   }, [id, refreshVerification]);
 
+  // Ask the server whether this login is a doctor. Only the server can decide this.
+  useEffect(() => {
+    setDoctor(undefined);
+    setDoctorError(null);
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/doctor/me', { headers: { Authorization: `Bearer ${await getToken()}` } });
+        const body = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(body?.message ?? `Server error (${res.status})`);
+        if (!cancelled) setDoctor((body?.doctor as Doctor | null) ?? null);
+      } catch (err) {
+        if (cancelled) return;
+        setDoctor(null);
+        setDoctorError(err instanceof Error ? err.message : 'Could not check your account type.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, getToken]);
+
   const user: User | null =
     id && auth0.user
       ? {
@@ -119,7 +156,7 @@ function AuthBridge({ children }: { children: ReactNode }) {
         }
       : null;
 
-  const redirect = (screen_hint: 'login' | 'signup', returnTo = '/medical') =>
+  const redirect = (screen_hint: 'login' | 'signup', returnTo = '/home') =>
     auth0.loginWithRedirect({
       appState: { returnTo },
       authorizationParams: { screen_hint },
@@ -144,6 +181,9 @@ function AuthBridge({ children }: { children: ReactNode }) {
     verificationError,
     refreshVerification,
     setVerification,
+    doctor: doctor ?? null,
+    doctorLoading: !!id && doctor === undefined,
+    doctorError,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -173,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cacheLocation="localstorage"
       useRefreshTokens
       onRedirectCallback={(appState?: AppState) =>
-        navigate(appState?.returnTo ?? '/medical', { replace: true })
+        navigate(appState?.returnTo ?? '/home', { replace: true })
       }
     >
       <AuthBridge>{children}</AuthBridge>

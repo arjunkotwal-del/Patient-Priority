@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, type Verification } from '../auth/AuthContext';
+import { HINTS, checkFrame, cropRect, motionBetween, problemWith } from '../../lib/cardFrame.ts';
 
 /** Standard ID-1 card shape (85.6 × 54 mm). */
 const CARD_RATIO = 85.6 / 54;
 /** Guide frame width as a share of the camera frame; must match .scanner-guide in CSS. */
 const GUIDE_WIDTH = 0.86;
 const MAX_UPLOAD_PX = 2400;
+// Auto capture: check a small copy of the guide area every CHECK_MS, and take the photo
+// once STEADY_CHECKS checks in a row look good (about half a second).
+const ANALYSIS_WIDTH = 320;
+const CHECK_MS = 150;
+const STEADY_CHECKS = 4;
 
 function canvasToBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) =>
@@ -38,6 +44,7 @@ export function VerifyPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [scan, setScan] = useState({ hint: HINTS.no_card, progress: 0 });
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,14 +81,8 @@ export function VerifyPage() {
       });
       streamRef.current = stream;
       setPhoto(null);
-      setCameraOn(true);
-      // Video element mounts after cameraOn flips.
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          void videoRef.current.play();
-        }
-      });
+      setScan({ hint: HINTS.no_card, progress: 0 });
+      setCameraOn(true); // the effect below connects the stream once the video element exists
     } catch {
       setCameraError('Camera unavailable or permission denied. You can upload a photo instead.');
     }
@@ -90,22 +91,55 @@ export function VerifyPage() {
   const capture = async () => {
     const video = videoRef.current;
     if (!video || !video.videoWidth) return;
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
     // Crop to the guide frame plus a small margin so the whole card is kept.
-    let w = Math.min(vw, vw * GUIDE_WIDTH * 1.08);
-    let h = w / CARD_RATIO;
-    if (h > vh) {
-      h = vh;
-      w = h * CARD_RATIO;
-    }
+    const r = cropRect(video.videoWidth, video.videoHeight, GUIDE_WIDTH, CARD_RATIO);
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(w);
-    canvas.height = Math.round(h);
-    canvas.getContext('2d')!.drawImage(video, (vw - w) / 2, (vh - h) / 2, w, h, 0, 0, w, h);
+    canvas.width = Math.round(r.w);
+    canvas.height = Math.round(r.h);
+    canvas.getContext('2d')!.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
     setPhoto(await canvasToBlob(canvas));
     stopCamera();
   };
+
+  // Connect the camera to the video element after React has put it on the page.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!cameraOn || !video || !streamRef.current) return;
+    video.srcObject = streamRef.current;
+    video.play().catch(() => setCameraError('The camera started but the preview could not play. Tap "Use camera" again.'));
+  }, [cameraOn]);
+
+  // Auto capture: watch the camera and take the photo once the card is lined up, sharp,
+  // free of glare and held still. The manual button stays as a backup.
+  useEffect(() => {
+    if (!cameraOn) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = ANALYSIS_WIDTH;
+    canvas.height = Math.round(ANALYSIS_WIDTH / CARD_RATIO);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let previous: Uint8Array | null = null;
+    let good = 0;
+    let done = false;
+
+    const timer = setInterval(() => {
+      const video = videoRef.current;
+      if (done || !ctx || !video || !video.videoWidth || video.readyState < 2) return;
+      const r = cropRect(video.videoWidth, video.videoHeight, GUIDE_WIDTH, CARD_RATIO);
+      ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
+      const check = checkFrame(ctx.getImageData(0, 0, canvas.width, canvas.height));
+      const problem = problemWith(check, previous ? motionBetween(previous, check.gray) : Infinity);
+      previous = check.gray;
+      good = problem ? 0 : good + 1;
+      setScan({ hint: HINTS[problem ?? 'ok'], progress: Math.min(1, good / STEADY_CHECKS) });
+      if (good >= STEADY_CHECKS) {
+        done = true;
+        navigator.vibrate?.(60);
+        void capture();
+      }
+    }, CHECK_MS);
+    return () => clearInterval(timer);
+    // capture only uses refs and state setters, so it is safe to leave out.
+  }, [cameraOn]);
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
@@ -189,12 +223,21 @@ export function VerifyPage() {
 
           <fieldset>
             <legend>2. Photo of the front of your card</legend>
+            <p className="muted small">
+              Hold the card inside the frame on a dark, plain surface. The photo is taken automatically when the card
+              is clear.
+            </p>
 
             {cameraOn ? (
               <div className="scanner">
                 <video ref={videoRef} playsInline muted />
-                <div className="scanner-guide" aria-hidden="true" />
-                <p className="scanner-hint">Fit the card inside the frame. Avoid glare.</p>
+                <div className={scan.progress > 0 ? 'scanner-guide locking' : 'scanner-guide'} aria-hidden="true" />
+                <div className="scanner-hint" role="status" aria-live="polite">
+                  <p>{scan.hint}</p>
+                  <div className="scanner-progress" aria-hidden="true">
+                    <span style={{ transform: `scaleX(${scan.progress})` }} />
+                  </div>
+                </div>
               </div>
             ) : preview ? (
               <img className="scanner-preview" src={preview} alt="Your health card photo" />
@@ -205,7 +248,7 @@ export function VerifyPage() {
             <div className="row-buttons">
               {cameraOn ? (
                 <>
-                  <button type="button" className="btn" onClick={() => void capture()}>Capture</button>
+                  <button type="button" className="btn" onClick={() => void capture()}>Take photo now</button>
                   <button type="button" className="btn btn-ghost" onClick={stopCamera}>Cancel</button>
                 </>
               ) : (

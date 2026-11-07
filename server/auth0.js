@@ -73,6 +73,12 @@ export async function findUsersByCardHash(hash) {
   return users.map((u) => u.user_id);
 }
 
+/** The Auth0 user ids for an email address (one per login method, e.g. password and Google). */
+export async function findUserIdsByEmail(email) {
+  const users = await mgmtFetch(`/users-by-email?email=${encodeURIComponent(email)}&fields=user_id&include_fields=true`);
+  return users.map((u) => u.user_id);
+}
+
 export async function setHealthCard(userId, healthCard) {
   await mgmtFetch(`/users/${encodeURIComponent(userId)}`, {
     method: 'PATCH',
