@@ -10,6 +10,7 @@ import express from 'express';
 import { scanForRedFlags } from '../lib/redFlags.ts';
 import { requireOwnVisit, requirePatient } from './access.js';
 import * as db from './db.js';
+import { notifyVisit } from './events.js';
 import { parseInterviewRequest, runInterviewTurn, TRIAGE_MESSAGE } from './interview.js';
 import { runSummary } from './summary.js';
 
@@ -76,6 +77,12 @@ async function replyToDoctor(visit, text) {
   return { visitId: visit.id, status: 'waiting_for_doctor' };
 }
 
+/** Tells doctors when an interview ends: a new case in the queue, or one sent to triage. */
+async function announceInterviewEnd(result) {
+  if (result.status === 'waiting_for_doctor') await notifyVisit(result.visitId, 'new_case', 'doctors');
+  else if (result.status === 'escalated') await notifyVisit(result.visitId, 'status_changed', 'doctors');
+}
+
 const route = (fn) => async (req, res, next) => {
   try {
     await fn(req, res);
@@ -100,7 +107,9 @@ visitsRouter.post(
 
     const visitId = await db.createVisit(req.patientId, input.complaint, input.premadeAnswers);
     await db.addMessage(visitId, { from: 'patient', kind: 'answer', text: input.complaint });
-    res.status(201).json(await advanceInterview(await db.getVisit(visitId)));
+    const result = await advanceInterview(await db.getVisit(visitId));
+    await announceInterviewEnd(result);
+    res.status(201).json(result);
   }),
 );
 
@@ -116,10 +125,14 @@ visitsRouter.post(
     const visit = await db.getVisit(req.visitId);
     if (visit.status === 'interviewing') {
       await db.addMessage(visit.id, { from: 'patient', kind: 'answer', text });
-      return res.json(await advanceInterview(await db.getVisit(visit.id)));
+      const result = await advanceInterview(await db.getVisit(visit.id));
+      await announceInterviewEnd(result);
+      return res.json(result);
     }
     if (visit.status === 'waiting_for_doctor' || visit.status === 'doctor_asked') {
-      return res.json(await replyToDoctor(visit, text));
+      const result = await replyToDoctor(visit, text);
+      await notifyVisit(visit.id, result.status === 'escalated' ? 'status_changed' : 'patient_message', 'doctors');
+      return res.json(result);
     }
     const message = visit.status === 'escalated' ? TRIAGE_MESSAGE : 'This visit is closed. Start a new visit if you need help.';
     res.status(409).json({ code: 'visit_closed', message });

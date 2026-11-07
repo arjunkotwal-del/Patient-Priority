@@ -13,6 +13,7 @@
 import express from 'express';
 import { requireDoctor, requireVisit } from './access.js';
 import * as db from './db.js';
+import { notifyVisit } from './events.js';
 
 const OPEN = new Set(['waiting_for_doctor', 'doctor_asked']);
 const ORDER_TYPES = new Set(['lab', 'imaging', 'referral', 'other']);
@@ -118,6 +119,7 @@ doctorRouter.post(
   route(async (req, res) => {
     if (!(await loadMyOpenCase(req, res))) return;
     await db.logAccess(req.doctor.id, req.visitId, 'claimed');
+    await notifyVisit(req.visitId, 'status_changed', 'doctors');
     res.json({ ok: true });
   }),
 );
@@ -146,6 +148,7 @@ doctorRouter.post(
     // A question waits on the patient; a plan leaves the case with the doctor to resolve.
     if (reply.kind === 'question') await db.setVisitStatus(req.visitId, 'doctor_asked');
     await Promise.all([db.logAccess(req.doctor.id, req.visitId, `sent_${reply.kind}`), db.markRead(req.visitId, 'doctor')]);
+    await notifyVisit(req.visitId, 'doctor_message');
     res.status(201).json({ ok: true });
   }),
 );
@@ -160,6 +163,7 @@ doctorRouter.post(
     if (!(await loadMyOpenCase(req, res))) return;
     await db.addPrescription(req.visitId, req.doctor.id, rx);
     await db.logAccess(req.doctor.id, req.visitId, 'prescribed');
+    await notifyVisit(req.visitId, 'doctor_update', 'patient');
     res.status(201).json({ ok: true });
   }),
 );
@@ -174,6 +178,7 @@ doctorRouter.post(
     if (!(await loadMyOpenCase(req, res))) return;
     await db.addOrder(req.visitId, req.doctor.id, order);
     await db.logAccess(req.doctor.id, req.visitId, 'ordered');
+    await notifyVisit(req.visitId, 'doctor_update', 'patient');
     res.status(201).json({ ok: true });
   }),
 );
@@ -212,6 +217,7 @@ doctorRouter.post(
       ctasOverrideReason: result.ctasOverrideReason,
     });
     await db.logAccess(req.doctor.id, req.visitId, 'resolved');
+    await notifyVisit(req.visitId, 'status_changed');
     res.json({ ok: true });
   }),
 );
@@ -226,6 +232,7 @@ doctorRouter.post(
     if (!(await loadMyOpenCase(req, res))) return;
     await db.escalateVisit(req.visitId, [`Doctor: ${reason}`]);
     await db.logAccess(req.doctor.id, req.visitId, 'escalated');
+    await notifyVisit(req.visitId, 'status_changed');
     res.json({ ok: true });
   }),
 );
