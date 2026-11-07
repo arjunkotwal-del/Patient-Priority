@@ -1,7 +1,5 @@
-// POST /api/interview: returns the next intake question for a patient.
-// The route is stateless: the client sends the whole interview on every call,
-// so the red flag scanner re-checks every patient message each time.
-import { loadHistory } from './db.js';
+// The intake interview: picks the next question with Gemini, after the red flag scanner
+// has re-checked every patient message. Used by the patient routes in visits.js.
 import { buildInterviewPrompt } from '../lib/interviewPrompt.ts';
 import { getComplaintFlags, scanForRedFlags } from '../lib/redFlags.ts';
 
@@ -41,13 +39,13 @@ function parseQaList(value) {
   return valid ? items : null;
 }
 
-/** Returns { complaint, premadeAnswers, transcript, demoPatientId }, or null if the body is invalid. */
+/** Returns { complaint, premadeAnswers, transcript }, or null if the body is invalid. */
 export function parseInterviewRequest(body) {
   const complaint = typeof body?.complaint === 'string' ? body.complaint.trim() : '';
   const premadeAnswers = parseQaList(body?.premadeAnswers);
   const transcript = parseQaList(body?.transcript);
   if (!complaint || complaint.length > MAX_TEXT || !premadeAnswers || !transcript) return null;
-  return { complaint, premadeAnswers, transcript, demoPatientId: body?.demoPatientId };
+  return { complaint, premadeAnswers, transcript };
 }
 
 /** Checks Gemini's reply. Returns a clean AiQuestion, or null if it can't be used. */
@@ -146,21 +144,4 @@ export async function runInterviewTurn(input) {
   if (ai.escalate) return { ...ai, escalateReason: ai.escalateReason || 'AI escalated without a reason' };
   if (finalTurn) return { ...emptyResult(), done: true };
   return ai;
-}
-
-/** Express handler. Staff-only escalation reasons are removed before the reply. */
-export async function interviewHandler(req, res, next) {
-  try {
-    const input = parseInterviewRequest(req.body);
-    if (!input) return res.status(400).json({ code: 'bad_request', message: 'The interview data was not valid.' });
-
-    const history = await loadHistory(input.demoPatientId, req.userId);
-    const result = await runInterviewTurn({ ...input, history });
-    if (!result.escalate) return res.json(result);
-
-    // TODO(storage): save result.escalateReason on the case so staff can see it.
-    res.json({ ...result, escalateReason: '', patientMessage: TRIAGE_MESSAGE });
-  } catch (err) {
-    next(err);
-  }
 }

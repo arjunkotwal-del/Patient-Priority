@@ -184,8 +184,8 @@ Every error is `{ "code": "...", "message": "..." }`. The message is safe to sho
 
 ---
 
-## Old routes: don't use them
+## Removed routes
 
-`POST /api/interview`, `POST /api/summary` and `POST /api/chat/scan` are the first version, where the
-browser held the whole interview. `/api/summary` sends the SOAP note to the browser, which patients
-must never see. The routes above replace all three. They'll be removed once nothing calls them.
+`POST /api/interview`, `POST /api/summary` and `POST /api/chat/scan` were the first version, where the
+browser held the whole interview and `/api/summary` sent the SOAP note to the browser. They have been
+removed. Use the visit routes above instead.

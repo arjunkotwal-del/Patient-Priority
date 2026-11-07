@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { formatHistoryForPrompt, DEMO_PATIENTS } from '../lib/history.ts';
 import { getComplaintFlags, scanForRedFlags } from '../lib/redFlags.ts';
-import { interviewHandler, MAX_QUESTIONS, parseAiQuestion, runInterviewTurn, TRIAGE_MESSAGE } from './interview.js';
+import { MAX_QUESTIONS, parseAiQuestion, runInterviewTurn } from './interview.js';
 
 const labels = (text) => scanForRedFlags(text).map((h) => h.label);
 const question = { question: 'Where does it hurt?', options: ['Left', 'Right'], allowOther: true, done: false, escalate: false, escalateReason: '' };
@@ -111,11 +111,5 @@ describe('runInterviewTurn', () => {
     calls = 0;
     stub({ ...question, question: '', escalate: true, escalateReason: 'not minor' });
     assert.equal((await runInterviewTurn(input({ transcript }))).escalate, true);
-  });
-  it('hides the staff reason from the patient', async () => {
-    let sent;
-    await interviewHandler({ body: { complaint: 'I have chest pain' } }, { json: (b) => (sent = b) }, assert.fail);
-    assert.equal(sent.escalateReason, '');
-    assert.equal(sent.patientMessage, TRIAGE_MESSAGE);
   });
 });

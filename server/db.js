@@ -60,21 +60,6 @@ export async function getPatientHistory({ patientId, auth0UserId }) {
   };
 }
 
-/**
- * Loads history for an interview. A demoPatientId (only ids starting with "demo-") picks
- * a fake patient; otherwise we look up the logged-in user. Never throws: if the database
- * is down, the interview carries on without history.
- */
-export async function loadHistory(demoPatientId, auth0UserId) {
-  const isDemo = typeof demoPatientId === 'string' && demoPatientId.startsWith('demo-');
-  try {
-    return await getPatientHistory(isDemo ? { patientId: demoPatientId } : { auth0UserId });
-  } catch (err) {
-    console.warn('History unavailable:', err.message);
-    return null;
-  }
-}
-
 // ---- Visits: one per case, with its full chat, doctor, diagnosis and prescriptions ----
 
 /** Thrown when DATABASE_URL isn't set, so routes can answer 503 instead of a generic error. */
