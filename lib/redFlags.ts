@@ -76,12 +76,20 @@ export interface RedFlagHit {
 
 /** Returns every unnegated red flag in a patient's message. */
 export function scanForRedFlags(message: string): RedFlagHit[] {
+  return scanKeywords(message, KEYWORDS);
+}
+
+/**
+ * Finds every unnegated keyword in a message. Shared by the red flag scanner and the
+ * priority rules, so "no fever" is ignored the same way in both.
+ */
+export function scanKeywords(message: string, keywords: { label: string; pattern: RegExp }[]): RedFlagHit[] {
   const hits = new Map<string, RedFlagHit>();
   const normalized = message.toLowerCase().replace(/[‘’]/g, "'");
   // Each clause is judged alone: "no fever but chest pain" must still flag.
   const clauses = normalized.split(/[.,;:!?\n]+|\b(?:but|and|then|so|now|because|however|although|though|except)\b/);
   for (const clause of clauses) {
-    for (const { label, pattern } of KEYWORDS) {
+    for (const { label, pattern } of keywords) {
       const match = pattern.exec(clause);
       if (match && !isNegated(clause, match.index)) hits.set(label, { label, text: match[0] });
     }
