@@ -110,6 +110,15 @@ export async function getOrCreatePatientId(auth0UserId) {
   return rows[0].id;
 }
 
+/** Records that a doctor opened or changed a patient's record. action is e.g. "viewed" or "prescribed". */
+export async function logAccess(doctorId, visitId, action) {
+  await requirePool().query(
+    `INSERT INTO access_log (doctor_id, patient_id, visit_id, action)
+     SELECT $1, patient_id, id, $3 FROM past_visits WHERE id = $2`,
+    [doctorId, visitId, action],
+  );
+}
+
 /** Which patient a visit belongs to, or null if the visit doesn't exist. */
 export async function getVisitPatientId(visitId) {
   const { rows } = await requirePool().query('SELECT patient_id FROM past_visits WHERE id = $1', [visitId]);

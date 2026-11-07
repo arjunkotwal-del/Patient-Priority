@@ -92,6 +92,18 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS orders_visit ON orders (visit_id);
 
+-- Who opened or changed which patient's record, and when (PHIPA-style audit trail).
+-- Rows outlive the visit they point at, so resetting demo data keeps the log.
+CREATE TABLE IF NOT EXISTS access_log (
+  id         BIGSERIAL PRIMARY KEY,
+  doctor_id  TEXT NOT NULL REFERENCES doctors(id),
+  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  visit_id   BIGINT REFERENCES past_visits(id) ON DELETE SET NULL,
+  action     TEXT NOT NULL,
+  at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS access_log_patient ON access_log (patient_id, at DESC);
+
 -- Private notes for doctors only. Never shown to the patient or sent to the AI.
 CREATE TABLE IF NOT EXISTS doctor_notes (
   id         BIGSERIAL PRIMARY KEY,
