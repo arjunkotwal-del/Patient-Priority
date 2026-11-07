@@ -11,6 +11,7 @@ export function formatHistoryForPrompt(history: PatientHistory | null | undefine
     .slice(0, RECENT_VISITS)
     .map((v) => `- ${v.date}: ${v.complaint}. ${v.summary} Plan: ${v.plan}`);
   return [
+    `Today's date: ${new Date().toISOString().slice(0, 10)}`,
     `Allergies: ${list(history.allergies)}`,
     `Current medications: ${list(history.currentMeds)}`,
     `Conditions: ${list(history.conditions)}`,
