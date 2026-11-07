@@ -91,7 +91,28 @@ try {
       );
     }
   }
+  // Optional: link real Auth0 logins to the demo doctor and a demo patient.
+  // Only this script adds doctors, so nobody can become one through the app.
+  // The env settings are the source of truth: blank means no demo login is linked.
+  const links = [];
+  await client.query('UPDATE doctors SET auth0_user_id = NULL WHERE id = $1', [DEMO_DOCTOR.id]);
+  await client.query('UPDATE patients SET auth0_user_id = NULL WHERE id = ANY($1)', [Object.keys(DEMO_PATIENTS)]);
+  const doctorLogin = process.env.DEMO_DOCTOR_AUTH0_ID?.trim();
+  if (doctorLogin) {
+    await client.query('UPDATE doctors SET auth0_user_id = NULL WHERE auth0_user_id = $1 AND id <> $2', [doctorLogin, DEMO_DOCTOR.id]);
+    await client.query('UPDATE doctors SET auth0_user_id = $1 WHERE id = $2', [doctorLogin, DEMO_DOCTOR.id]);
+    links.push(`doctor login -> ${DEMO_DOCTOR.name}`);
+  }
+  const patientLogin = process.env.DEMO_PATIENT_AUTH0_ID?.trim();
+  const demoPatientId = process.env.DEMO_PATIENT_ID?.trim() || 'demo-maya';
+  if (patientLogin) {
+    if (!Object.hasOwn(DEMO_PATIENTS, demoPatientId)) throw new Error(`DEMO_PATIENT_ID must be one of: ${Object.keys(DEMO_PATIENTS).join(', ')}`);
+    await client.query('UPDATE patients SET auth0_user_id = NULL WHERE auth0_user_id = $1 AND id <> $2', [patientLogin, demoPatientId]);
+    await client.query('UPDATE patients SET auth0_user_id = $1 WHERE id = $2', [patientLogin, demoPatientId]);
+    links.push(`patient login -> ${demoPatientId}`);
+  }
   await client.query('COMMIT');
+  if (links.length) console.log(`Linked: ${links.join(', ')}.`);
   const { rows } = await client.query(
     `SELECT (SELECT count(*)::int FROM patients) AS patients, (SELECT count(*)::int FROM past_visits) AS visits,
             (SELECT count(*)::int FROM past_visits WHERE status = 'waiting_for_doctor') AS waiting,
