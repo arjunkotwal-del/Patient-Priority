@@ -1,7 +1,7 @@
 // POST /api/interview: returns the next intake question for a patient.
 // The route is stateless: the client sends the whole interview on every call,
 // so the red flag scanner re-checks every patient message each time.
-import { DEMO_PATIENTS } from '../lib/history.ts';
+import { loadHistory } from './db.js';
 import { buildInterviewPrompt } from '../lib/interviewPrompt.ts';
 import { getComplaintFlags, scanForRedFlags } from '../lib/redFlags.ts';
 
@@ -118,7 +118,7 @@ export function scanInterview({ complaint, premadeAnswers, transcript }) {
 
 /** Runs one interview turn. escalateReason is for staff and must never reach the patient. */
 export async function runInterviewTurn(input) {
-  const { complaint, premadeAnswers, transcript, demoPatientId } = input;
+  const { complaint, premadeAnswers, transcript, history = null } = input;
 
   // The scanner runs first, so a scary message never depends on the AI.
   const hits = scanInterview(input);
@@ -130,7 +130,7 @@ export async function runInterviewTurn(input) {
   const systemPrompt = buildInterviewPrompt({
     maxQuestions: MAX_QUESTIONS,
     complaintFlags: getComplaintFlags(complaint),
-    history: Object.hasOwn(DEMO_PATIENTS, String(demoPatientId)) ? DEMO_PATIENTS[demoPatientId] : null,
+    history,
     premadeAnswers,
   });
   const ai = await askGemini(systemPrompt, conversationText(input, finalTurn), RESPONSE_SCHEMA, parseAiQuestion);
@@ -148,7 +148,8 @@ export async function interviewHandler(req, res, next) {
     const input = parseInterviewRequest(req.body);
     if (!input) return res.status(400).json({ code: 'bad_request', message: 'The interview data was not valid.' });
 
-    const result = await runInterviewTurn(input);
+    const history = await loadHistory(input.demoPatientId, req.userId);
+    const result = await runInterviewTurn({ ...input, history });
     if (!result.escalate) return res.json(result);
 
     // TODO(storage): save result.escalateReason on the case so staff can see it.

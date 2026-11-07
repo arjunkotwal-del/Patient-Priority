@@ -1,6 +1,6 @@
 // POST /api/summary: turns a finished interview into a SOAP note and suggested CTAS.
 // If the rules or the AI say escalate, we escalate. Rules always win.
-import { DEMO_PATIENTS } from '../lib/history.ts';
+import { loadHistory } from './db.js';
 import { getComplaintFlags } from '../lib/redFlags.ts';
 import { buildSummaryPrompt } from '../lib/summaryPrompt.ts';
 import { askGemini, conversationText, parseInterviewRequest, scanInterview, TRIAGE_MESSAGE } from './interview.js';
@@ -52,7 +52,7 @@ export async function runSummary(input) {
 
   const systemPrompt = buildSummaryPrompt({
     complaintFlags: getComplaintFlags(input.complaint),
-    history: Object.hasOwn(DEMO_PATIENTS, String(input.demoPatientId)) ? DEMO_PATIENTS[input.demoPatientId] : null,
+    history: input.history ?? null,
   });
   const result = await askGemini(systemPrompt, summaryText(input), RESPONSE_SCHEMA, parseTriageResult);
 
@@ -66,7 +66,8 @@ export async function summaryHandler(req, res, next) {
     const input = parseInterviewRequest(req.body);
     if (!input) return res.status(400).json({ code: 'bad_request', message: 'The interview data was not valid.' });
 
-    const result = await runSummary(input);
+    const history = await loadHistory(input.demoPatientId, req.userId);
+    const result = await runSummary({ ...input, history });
     // TODO(storage): save the full result on the case so the doctor or triage staff can see it.
     if (result.escalate) return res.json({ escalate: true, patientMessage: TRIAGE_MESSAGE });
     res.json(result);
