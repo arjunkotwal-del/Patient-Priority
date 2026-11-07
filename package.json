@@ -8,13 +8,15 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "start": "node server.js",
-    "test": "node --test --test-timeout=10000 server/*.test.js"
+    "test": "node --test --test-timeout=10000 server/*.test.js",
+    "db:setup": "node server/dbSetup.js"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.30.0",
     "express": "^5.3.0",
     "jose": "^6.2.15",
     "multer": "^2.5.0",
+    "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.5",
