@@ -18,7 +18,7 @@ export function LoginPage() {
       <div className="auth-card">
         <Link to="/" className="brand">Patient Priority</Link>
         <h1>Welcome</h1>
-        <p className="muted">Log in toooo your account, or create one to get started.</p>
+        <p className="muted">Log in to your account, or create one to get started.</p>
         {error && <p className="error">{error.message}</p>}
         <button className="btn btn-lg" onClick={() => go('login')} disabled={pending !== null}>
           {pending === 'login' ? 'Redirecting…' : 'Log in'}
