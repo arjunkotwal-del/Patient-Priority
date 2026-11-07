@@ -50,7 +50,7 @@ function publicStatus(card) {
 
 // Simple per-user limit on scan attempts (OCR is expensive and this slows guessing).
 const attempts = new Map();
-const MAX_ATTEMPTS = 10;
+const MAX_ATTEMPTS = DEV ? 100 : 30;
 const WINDOW_MS = 60 * 60 * 1000;
 function rateLimited(userId) {
   const now = Date.now();
@@ -94,7 +94,7 @@ api.post('/verification', upload.single('card'), async (req, res, next) => {
 
     let result;
     try {
-      result = await verifyOntarioCard(req.file.buffer, firstName, lastName);
+      result = await verifyOntarioCard(req.file.buffer, firstName, lastName, { debug: DEV || !!process.env.CARD_DEBUG });
     } catch (err) {
       console.warn('Card image could not be processed:', err.message);
       return res.status(400).json({ code: 'bad_image', message: "We couldn't read that image. Try a JPG or PNG photo." });

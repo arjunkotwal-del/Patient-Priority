@@ -22,20 +22,21 @@ export interface FrameCheck {
 
 export type Problem = 'no_card' | 'glare' | 'blurry' | 'moving';
 
-// Tuned for a frame about 320 px wide. Adjust after testing on real phones.
+// Tuned for a frame about 320 px wide. Strict about whether a card is there (so it doesn't
+// fire on random scenes), lenient about blur, glare and movement.
 export const LIMITS = {
   /** Edges that must be found; 3 allows a thumb over one edge. */
   minEdges: 3,
   /** Only look for an edge this far in from the frame's sides. */
-  edgeBand: 0.16,
+  edgeBand: 0.2,
   /** Brightness jump (0-255) that counts as an edge. */
-  edgeContrast: 28,
+  edgeContrast: 22,
   /** Share of rows or columns that must show the same straight edge. */
-  edgeCoverage: 0.55,
-  minSharpness: 60,
-  maxGlare: 0.03,
+  edgeCoverage: 0.5,
+  minSharpness: 35,
+  maxGlare: 0.06,
   /** Average brightness change per pixel between checks. */
-  maxMotion: 7,
+  maxMotion: 16,
 };
 
 export const HINTS: Record<Problem | 'ok', string> = {
@@ -59,8 +60,10 @@ export function toGray({ data, width, height }: Frame): Uint8Array {
  * the band, finds its strongest brightness jump, and counts the lines whose jump is
  * strong and at the same distance from the side as most others. Card print and text
  * give jumps too, but not lined up in a straight row along the whole side.
+ * Returns +1 if the inside of the edge is brighter than the outside, -1 if darker, 0 for
+ * no edge. A real card on a surface has the same sign on every side.
  */
-function hasEdge(gray: Uint8Array, width: number, height: number, side: 'left' | 'right' | 'top' | 'bottom'): boolean {
+function edgeSign(gray: Uint8Array, width: number, height: number, side: 'left' | 'right' | 'top' | 'bottom'): number {
   const vertical = side === 'left' || side === 'right';
   const along = vertical ? height : width; // lines to scan
   const across = vertical ? width : height; // pixels per line
@@ -70,26 +73,34 @@ function hasEdge(gray: Uint8Array, width: number, height: number, side: 'left' |
   const from = Math.round(along * 0.15);
   const to = Math.round(along * 0.85);
 
-  const positions: number[] = [];
+  const far = side === 'right' || side === 'bottom';
+  const hits: { pos: number; sign: number }[] = [];
   for (let line = from; line < to; line++) {
     let best = 0;
     let bestPos = -1;
+    let bestSign = 0;
     for (let k = 1; k < band - 1; k++) {
-      const pos = side === 'right' || side === 'bottom' ? across - 1 - k : k;
-      const jump = Math.abs(at(line, pos + 1) - at(line, pos - 1));
-      if (jump > best) {
-        best = jump;
+      const pos = far ? across - 1 - k : k;
+      // Inside minus outside: moving inward is +pos on near sides, -pos on far sides.
+      const diff = far ? at(line, pos - 1) - at(line, pos + 1) : at(line, pos + 1) - at(line, pos - 1);
+      if (Math.abs(diff) > best) {
+        best = Math.abs(diff);
         bestPos = k;
+        bestSign = Math.sign(diff);
       }
     }
-    if (best >= LIMITS.edgeContrast) positions.push(bestPos);
+    if (best >= LIMITS.edgeContrast) hits.push({ pos: bestPos, sign: bestSign });
   }
-  if (positions.length === 0) return false;
+  if (hits.length === 0) return 0;
 
-  const sorted = [...positions].sort((a, b) => a - b);
+  const sorted = hits.map((h) => h.pos).sort((a, b) => a - b);
   const median = sorted[sorted.length >> 1];
-  const straight = positions.filter((p) => Math.abs(p - median) <= 2).length;
-  return straight / (to - from) >= LIMITS.edgeCoverage;
+  // Lines on the same straight edge (a few pixels of drift for a tilted card) ...
+  const straight = hits.filter((h) => Math.abs(h.pos - median) <= 3);
+  // ... that also agree on which side is brighter.
+  const up = straight.filter((h) => h.sign > 0).length;
+  const down = straight.length - up;
+  return Math.max(up, down) / (to - from) >= LIMITS.edgeCoverage ? (up >= down ? 1 : -1) : 0;
 }
 
 /** Variance of the Laplacian over the middle of the frame: low means blurry. */
@@ -115,7 +126,10 @@ export function checkFrame(frame: Frame): FrameCheck {
   const { width, height } = frame;
   const gray = toGray(frame);
   const sides = ['left', 'right', 'top', 'bottom'] as const;
-  const edges = sides.filter((side) => hasEdge(gray, width, height, side)).length;
+  // Count only edges that agree with the majority on which side is brighter, so stray
+  // lines in the background (a door frame, a keyboard) don't add up to a "card".
+  const signs = sides.map((side) => edgeSign(gray, width, height, side));
+  const edges = Math.max(signs.filter((s) => s > 0).length, signs.filter((s) => s < 0).length);
   let blown = 0;
   for (const v of gray) if (v >= 250) blown++;
   return { edges, sharpness: sharpnessOf(gray, width, height), glare: blown / gray.length, gray };
@@ -133,7 +147,9 @@ export function motionBetween(a: Uint8Array, b: Uint8Array): number {
 export function problemWith(check: FrameCheck, motion: number): Problem | null {
   if (check.edges < LIMITS.minEdges) return 'no_card';
   if (check.glare > LIMITS.maxGlare) return 'glare';
-  if (motion > LIMITS.maxMotion) return 'moving';
+  // Movement only matters when it costs sharpness: a clearly sharp frame is good even if
+  // the hand drifted a little since the last check.
+  if (motion > LIMITS.maxMotion && check.sharpness < LIMITS.minSharpness * 2) return 'moving';
   if (check.sharpness < LIMITS.minSharpness) return 'blurry';
   return null;
 }

@@ -48,8 +48,25 @@ describe('checkFrame', () => {
   it('still passes with a thumb over one edge', () => {
     const thumb = frame((x, y) => (x < W * 0.2 ? 150 : onCard(x, y) ? text(x, y) : 35));
     const check = checkFrame(thumb);
-    assert.equal(check.edges, 3);
+    assert.ok(check.edges >= LIMITS.minEdges, `edges ${check.edges}`);
     assert.equal(problemWith(check, 0), null);
+  });
+
+  it('finds no card in a scene with a few random straight lines', () => {
+    // A bright door frame on the left, a dark shelf at the top, busy texture elsewhere.
+    let seed = 3;
+    const noise = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) % 60) + 90;
+    const scene = frame((x, y) => (x < 20 ? 230 : y < 15 ? 20 : noise()));
+    assert.equal(problemWith(checkFrame(scene), 0), 'no_card');
+  });
+
+  it('finds no card in a sharp, detailed frame with no card outline', () => {
+    assert.equal(problemWith(checkFrame(frame((x, y) => text(x, y))), 0), 'no_card');
+  });
+
+  it('finds a dark card on a light table too', () => {
+    const dark = frame((x, y) => (onCard(x, y) ? 255 - text(x, y) : 230));
+    assert.ok(checkFrame(dark).edges >= LIMITS.minEdges);
   });
 
   it('calls a card with no fine detail blurry', () => {
@@ -69,7 +86,10 @@ describe('motionBetween', () => {
     const shifted = checkFrame(frame((x, y) => (onCard(x + 9, y) ? text(x + 9, y) : 35))).gray;
     assert.equal(motionBetween(a, a), 0);
     assert.ok(motionBetween(a, shifted) > LIMITS.maxMotion);
-    assert.equal(problemWith(checkFrame(sharpCard), motionBetween(a, shifted)), 'moving');
+    // Movement blocks a so-so frame, but not one that is clearly sharp anyway.
+    const soSo = { ...checkFrame(sharpCard), sharpness: LIMITS.minSharpness * 1.5 };
+    assert.equal(problemWith(soSo, motionBetween(a, shifted)), 'moving');
+    assert.equal(problemWith(checkFrame(sharpCard), motionBetween(a, shifted)), null);
   });
 });
 

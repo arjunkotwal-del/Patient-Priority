@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, type Verification } from '../auth/AuthContext';
-import { HINTS, checkFrame, cropRect, motionBetween, problemWith } from '../../lib/cardFrame.ts';
+import { HINTS, LIMITS, checkFrame, cropRect, motionBetween, problemWith } from '../../lib/cardFrame.ts';
 
 /** Standard ID-1 card shape (85.6 × 54 mm). */
 const CARD_RATIO = 85.6 / 54;
@@ -9,10 +9,15 @@ const CARD_RATIO = 85.6 / 54;
 const GUIDE_WIDTH = 0.86;
 const MAX_UPLOAD_PX = 2400;
 // Auto capture: check a small copy of the guide area every CHECK_MS, and take the photo
-// once STEADY_CHECKS checks in a row look good (about half a second).
+// once STEADY_CHECKS good checks have built up (about a third of a second). One bad
+// frame only knocks progress back a step instead of starting over. Meanwhile the
+// sharpest frame that clearly shows a card is kept; if the card has been in the frame
+// for CARD_SEEN_MS but never quite steady, that frame is used, so nobody has to hold
+// perfectly still for long. Frames without a card never count.
 const ANALYSIS_WIDTH = 320;
-const CHECK_MS = 150;
-const STEADY_CHECKS = 4;
+const CHECK_MS = 100;
+const STEADY_CHECKS = 3;
+const CARD_SEEN_MS = 2500;
 
 function canvasToBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) =>
@@ -88,16 +93,20 @@ export function VerifyPage() {
     }
   };
 
-  const capture = async () => {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
-    // Crop to the guide frame plus a small margin so the whole card is kept.
+  /** Full-resolution copy of the guide area (plus a small margin so the whole card is kept). */
+  const grabFrame = (video: HTMLVideoElement, into = document.createElement('canvas')) => {
     const r = cropRect(video.videoWidth, video.videoHeight, GUIDE_WIDTH, CARD_RATIO);
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(r.w);
-    canvas.height = Math.round(r.h);
-    canvas.getContext('2d')!.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
-    setPhoto(await canvasToBlob(canvas));
+    into.width = Math.round(r.w);
+    into.height = Math.round(r.h);
+    into.getContext('2d')!.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, into.width, into.height);
+    return into;
+  };
+
+  /** Takes the photo: from a frame saved earlier, or from the live video. */
+  const capture = async (saved?: HTMLCanvasElement) => {
+    const video = videoRef.current;
+    if (!saved && (!video || !video.videoWidth)) return;
+    setPhoto(await canvasToBlob(saved ?? grabFrame(video!)));
     stopCamera();
   };
 
@@ -120,6 +129,17 @@ export function VerifyPage() {
     let previous: Uint8Array | null = null;
     let good = 0;
     let done = false;
+    // How long a card has been in the frame (resets when it leaves).
+    let cardSince = 0;
+    // Sharpest frame so far that shows a card without glare, kept at full resolution.
+    const best = document.createElement('canvas');
+    let bestSharpness = 0;
+
+    const finish = (saved?: HTMLCanvasElement) => {
+      done = true;
+      navigator.vibrate?.(60);
+      void capture(saved);
+    };
 
     const timer = setInterval(() => {
       const video = videoRef.current;
@@ -129,13 +149,26 @@ export function VerifyPage() {
       const check = checkFrame(ctx.getImageData(0, 0, canvas.width, canvas.height));
       const problem = problemWith(check, previous ? motionBetween(previous, check.gray) : Infinity);
       previous = check.gray;
-      good = problem ? 0 : good + 1;
-      setScan({ hint: HINTS[problem ?? 'ok'], progress: Math.min(1, good / STEADY_CHECKS) });
-      if (good >= STEADY_CHECKS) {
-        done = true;
-        navigator.vibrate?.(60);
-        void capture();
+
+      if (problem === 'no_card') {
+        // Card gone: forget the saved frame so a later fallback can't use an old one.
+        cardSince = 0;
+        bestSharpness = 0;
+      } else {
+        cardSince ||= performance.now();
+        // Remember the sharpest card frame without glare (movement and slight blur are OK).
+        if (problem !== 'glare' && check.sharpness > bestSharpness) {
+          bestSharpness = check.sharpness;
+          grabFrame(video, best);
+        }
       }
+
+      good = problem ? Math.max(0, good - 1) : good + 1;
+      setScan({ hint: HINTS[problem ?? 'ok'], progress: Math.min(1, good / STEADY_CHECKS) });
+      if (good >= STEADY_CHECKS) return finish();
+      // Card held up for a while but never steady: use its sharpest frame, unless hopelessly blurry.
+      const cardHeld = cardSince > 0 && performance.now() - cardSince > CARD_SEEN_MS;
+      if (cardHeld && bestSharpness >= LIMITS.minSharpness * 0.7) finish(best);
     }, CHECK_MS);
     return () => clearInterval(timer);
     // capture only uses refs and state setters, so it is safe to leave out.
