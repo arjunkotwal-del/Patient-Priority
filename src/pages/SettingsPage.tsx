@@ -7,7 +7,7 @@ interface Settings {
 }
 
 const KEY = 'pp.settings';
-const DEFAULTS: Settings = { theme: 'system', fontSize: 'normal', emailNotifications: true };
+const DEFAULTS: Settings = { theme: 'light', fontSize: 'normal', emailNotifications: true };
 
 function load(): Settings {
   try {

@@ -6,8 +6,9 @@ export function AppLayout() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <span className="brand">Patient Priority</span>
-        <nav>
+        <a className="skip-link" href="#main-content">Skip to content</a>
+        <NavLink to="/medical" className="brand"><span className="brand-mark" aria-hidden="true">+</span>Patient Priority</NavLink>
+        <nav aria-label="Patient navigation">
           <NavLink to="/medical">Medical</NavLink>
           <NavLink to="/settings">Settings</NavLink>
           <NavLink to="/account">Account</NavLink>
@@ -17,7 +18,7 @@ export function AppLayout() {
           <button className="btn btn-ghost" onClick={logout}>Log out</button>
         </div>
       </header>
-      <main className="content">
+      <main className="content" id="main-content">
         <Outlet />
       </main>
     </div>
