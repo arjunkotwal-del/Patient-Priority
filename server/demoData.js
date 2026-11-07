@@ -3,6 +3,32 @@
 
 export const DEMO_DOCTOR = { id: 'demo-dr-rivera', name: 'Dr. Sam Rivera (demo)', licenseNumber: 'DEMO-0001' };
 
+// Cases waiting in the doctor queue right now, so the dashboard has something to show.
+// Each message is [minutes after check-in, sender, kind, text].
+export const DEMO_OPEN_CASES = [
+  {
+    patientId: 'demo-priya',
+    complaint: 'Ear pain',
+    minutesAgo: 25,
+    suggestedCtas: 4,
+    soap: {
+      subjective: 'Right ear pain since yesterday, pain 5/10, getting worse. Denies fever and ear discharge. Allergies: sulfa drugs, latex.',
+      objective: 'Remote intake, no physical exam or vitals.',
+      assessment: 'Worsening one-sided ear pain with no reported red flags. Presents as minor.',
+      plan: 'For doctor review. Hearing changes were not reported.',
+    },
+    messages: [
+      [0, 'patient', 'answer', 'My right ear has hurt since yesterday and it is getting worse.'],
+      [1, 'ai', 'question', 'Do you have a fever?'],
+      [1, 'patient', 'answer', 'No'],
+      [2, 'ai', 'question', 'Is any fluid coming out of the ear?'],
+      [2, 'patient', 'answer', 'No'],
+      [3, 'ai', 'question', 'How bad is the pain from 1 to 10?'],
+      [3, 'patient', 'answer', '5'],
+    ],
+  },
+];
+
 // Keyed by "patientId:visitDate". Each message is [minutes after check-in, sender, kind, text].
 export const DEMO_VISIT_DETAILS = {
   'demo-maya:2026-03-14': {
@@ -36,6 +62,8 @@ export const DEMO_VISIT_DETAILS = {
     ],
     // [minutes after check-in, text]
     doctorNotes: [[28, 'Diabetic, so ask about foot numbness at any follow-up. Short ibuprofen course only.']],
+    // [minutes after check-in, type, name, instructions]
+    orders: [[30, 'referral', 'Physiotherapy assessment', 'Book an appointment if you are not walking normally in 2 weeks.']],
   },
   'demo-daniel:2025-11-20': {
     startTime: '14:10',

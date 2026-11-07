@@ -4,7 +4,7 @@ import pg from 'pg';
 import { readFileSync } from 'node:fs';
 import { DEMO_PATIENTS } from '../lib/history.ts';
 import { connectionOptions } from './db.js';
-import { DEMO_DOCTOR, DEMO_VISIT_DETAILS } from './demoData.js';
+import { DEMO_DOCTOR, DEMO_OPEN_CASES, DEMO_VISIT_DETAILS } from './demoData.js';
 
 try {
   process.loadEnvFile('.env.local');
@@ -66,17 +66,42 @@ try {
           [id, DEMO_DOCTOR.id, rx.medication, rx.dose, rx.frequency, rx.duration, rx.instructions, startedAt],
         );
       }
+      for (const [minutes, type, name, instructions] of details?.orders ?? []) {
+        await client.query(
+          `INSERT INTO orders (visit_id, doctor_id, type, name, instructions, ordered_at)
+           VALUES ($1, $2, $3, $4, $5, $6::timestamptz + make_interval(mins => $7))`,
+          [id, DEMO_DOCTOR.id, type, name, instructions, startedAt, minutes],
+        );
+      }
+    }
+  }
+  // Open cases are timed relative to now, so they always look freshly waiting.
+  for (const c of DEMO_OPEN_CASES) {
+    const { rows } = await client.query(
+      `INSERT INTO past_visits (patient_id, complaint, status, suggested_ctas, soap, started_at)
+       VALUES ($1, $2, 'waiting_for_doctor', $3, $4, now() - make_interval(mins => $5))
+       RETURNING id, started_at`,
+      [c.patientId, c.complaint, c.suggestedCtas, c.soap, c.minutesAgo],
+    );
+    const { id, started_at: startedAt } = rows[0];
+    for (const [minutes, sender, kind, text] of c.messages) {
+      await client.query(
+        `INSERT INTO visit_messages (visit_id, sender, kind, text, sent_at) VALUES ($1, $2, $3, $4, $5::timestamptz + make_interval(mins => $6))`,
+        [id, sender, kind, text, startedAt, minutes],
+      );
     }
   }
   await client.query('COMMIT');
   const { rows } = await client.query(
     `SELECT (SELECT count(*)::int FROM patients) AS patients, (SELECT count(*)::int FROM past_visits) AS visits,
+            (SELECT count(*)::int FROM past_visits WHERE status = 'waiting_for_doctor') AS waiting,
             (SELECT count(*)::int FROM visit_messages) AS messages, (SELECT count(*)::int FROM prescriptions) AS prescriptions,
-            (SELECT count(*)::int FROM doctor_notes) AS notes`,
+            (SELECT count(*)::int FROM orders) AS orders, (SELECT count(*)::int FROM doctor_notes) AS notes`,
   );
   const c = rows[0];
   console.log(
-    `Database ready: ${c.patients} patients, ${c.visits} visits, ${c.messages} messages, ${c.prescriptions} prescriptions, ${c.notes} doctor notes.`,
+    `Database ready: ${c.patients} patients, ${c.visits} visits (${c.waiting} waiting), ${c.messages} messages, ` +
+      `${c.prescriptions} prescriptions, ${c.orders} orders, ${c.notes} doctor notes.`,
   );
 } catch (err) {
   await client.query('ROLLBACK').catch(() => {});
