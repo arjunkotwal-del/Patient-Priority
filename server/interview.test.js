@@ -78,6 +78,7 @@ describe('runInterviewTurn', () => {
   beforeEach(() => {
     calls = 0;
     process.env.GEMINI_API_KEY = 'test';
+    process.env.GEMINI_RETRY_BASE_MS = '0';
   });
   afterEach(() => {
     globalThis.fetch = realFetch;
@@ -98,10 +99,10 @@ describe('runInterviewTurn', () => {
     assert.equal((await runInterviewTurn(input())).question, question.question);
     assert.equal(calls, 2);
   });
-  it('escalates if Gemini keeps failing', async () => {
+  it('escalates if Gemini fails all 3 attempts', async () => {
     stub(new Error('down'));
     assert.equal((await runInterviewTurn(input())).escalate, true);
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
   });
   it('stops at the question limit but still lets the AI escalate', async () => {
     const transcript = Array.from({ length: MAX_QUESTIONS }, () => ({ question: 'q', answer: 'a' }));

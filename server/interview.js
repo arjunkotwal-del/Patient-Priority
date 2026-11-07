@@ -10,7 +10,7 @@ export const TRIAGE_MESSAGE = 'Please go to the triage desk now.';
 
 const MAX_TEXT = 2000;
 const MAX_ITEMS = 30;
-const GEMINI_ATTEMPTS = 2;
+const GEMINI_ATTEMPTS = 3;
 const GEMINI_TIMEOUT_MS = 15000;
 
 const RESPONSE_SCHEMA = {
@@ -96,9 +96,15 @@ async function callGemini(systemPrompt, userText, responseSchema) {
   return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
 }
 
-/** Calls Gemini with one retry. Returns parse(reply), or null if every attempt failed. */
+/**
+ * Calls Gemini, retrying with a growing wait (1.5s, then 3s). The free tier often answers
+ * 429 (rate limit) or 503 (overloaded) for a moment, and an instant retry just fails again.
+ * Returns parse(reply), or null if every attempt failed.
+ */
 export async function askGemini(systemPrompt, userText, responseSchema, parse) {
+  const baseDelay = Number(process.env.GEMINI_RETRY_BASE_MS ?? 1500);
   for (let attempt = 1; attempt <= GEMINI_ATTEMPTS; attempt++) {
+    if (attempt > 1 && baseDelay > 0) await new Promise((r) => setTimeout(r, baseDelay * 2 ** (attempt - 2)));
     try {
       const result = parse(await callGemini(systemPrompt, userText, responseSchema));
       if (result) return result;
