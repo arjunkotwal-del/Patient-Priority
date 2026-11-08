@@ -188,6 +188,50 @@ export async function listPatientVisits(patientId) {
   }));
 }
 
+/**
+ * The patient's own medical history: every medicine a doctor prescribed them, what it was for,
+ * and when they last visited. Only their own visits; nothing staff-only (no notes, SOAP or flags).
+ */
+export async function getPatientMedicalHistory(patientId) {
+  const pool = requirePool();
+  const [meds, last] = await Promise.all([
+    pool.query(
+      `SELECT p.medication, p.dose, p.frequency, p.duration, p.instructions, p.prescribed_at,
+              d.name AS doctor_name, v.id AS visit_id, v.complaint, v.diagnosis
+       FROM prescriptions p
+       JOIN past_visits v ON v.id = p.visit_id
+       JOIN doctors d ON d.id = p.doctor_id
+       WHERE v.patient_id = $1
+       ORDER BY p.prescribed_at DESC, p.id DESC`,
+      [patientId],
+    ),
+    pool.query(
+      `SELECT v.id, v.complaint, v.started_at, count(*) OVER ()::int AS total
+       FROM past_visits v WHERE v.patient_id = $1
+       ORDER BY v.started_at DESC, v.id DESC LIMIT 1`,
+      [patientId],
+    ),
+  ]);
+  const lastRow = last.rows[0];
+  return {
+    lastVisit: lastRow ? { visitId: Number(lastRow.id), complaint: lastRow.complaint, startedAt: iso(lastRow.started_at) } : null,
+    totalVisits: lastRow?.total ?? 0,
+    prescriptions: meds.rows.map((r) => ({
+      medication: r.medication,
+      dose: r.dose,
+      frequency: r.frequency,
+      duration: r.duration,
+      instructions: r.instructions,
+      prescribedAt: iso(r.prescribed_at),
+      doctorName: r.doctor_name,
+      visitId: Number(r.visit_id),
+      // What it was for: the doctor's diagnosis, or the patient's own complaint if there is none.
+      forWhat: r.diagnosis || r.complaint,
+      complaint: r.complaint,
+    })),
+  };
+}
+
 /** History for a known patient id. Never throws: without it, the interview carries on. */
 export async function loadPatientHistory(patientId) {
   try {

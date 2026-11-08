@@ -131,6 +131,18 @@ Returns `409 cannot_book` if the time has passed, it isn't one of the offered sl
 ```
 Use `unreadTotal` for the notification badge.
 
+### My medical history: `GET /api/me/history`
+Every medicine a doctor prescribed this patient, newest first, what it was for, and their last visit.
+`forWhat` is the doctor's diagnosis, or the patient's complaint if there was no diagnosis.
+```json
+{ "lastVisit": { "visitId": 12, "complaint": "Sore throat", "startedAt": "..." }, "totalVisits": 3,
+  "prescriptions": [{ "medication": "Ibuprofen", "dose": "400 mg", "frequency": "Every 8 hours as needed",
+                      "duration": "5 days", "instructions": "Take with food.", "prescribedAt": "...",
+                      "doctorName": "Dr. Sam Rivera (demo)", "visitId": 12, "forWhat": "Viral sore throat",
+                      "complaint": "Sore throat" }] }
+```
+`lastVisit` is `null` for a patient with no visits.
+
 ### Mark as read: `POST /api/visits/:id/read`
 Call it when the patient opens the visit. Returns `{ "ok": true }`.
 

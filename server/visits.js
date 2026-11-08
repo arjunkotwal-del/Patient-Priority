@@ -8,6 +8,7 @@
 //   GET  /api/visits/:id               the patient view: doctor's reply, prescriptions, tests, appointment
 //   POST /api/visits/:id/appointment   pick one of the offered appointment times
 //   GET  /api/me/visits                all my visits with unread counts (notification badge)
+//   GET  /api/me/history               my past prescriptions, what each was for, and my last visit
 //   POST /api/visits/:id/read          mark a visit as read
 import express from 'express';
 import { requireOwnVisit, requirePatient } from './access.js';
@@ -169,5 +170,14 @@ visitsRouter.get(
   route(async (req, res) => {
     const visits = await db.listPatientVisits(req.patientId);
     res.json({ visits, unreadTotal: visits.reduce((sum, v) => sum + v.unreadCount, 0) });
+  }),
+);
+
+// The patient's medical history: past prescriptions, what each was for, and the last visit.
+visitsRouter.get(
+  '/me/history',
+  requirePatient,
+  route(async (req, res) => {
+    res.json(await db.getPatientMedicalHistory(req.patientId));
   }),
 );
