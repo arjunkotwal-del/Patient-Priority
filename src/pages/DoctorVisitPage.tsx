@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { subscribeToUpdates } from '../lib/live';
 import { CTAS_LABELS, STATUS_LABELS, callApi, formatTime as time, type DoctorVisitDetail } from './doctorApi';
+import { PRIORITY_LABELS } from './DoctorQueuePage';
 
 const SENDER_LABELS = { patient: 'Patient', ai: 'Intake assistant', doctor: 'Doctor' } as const;
 const ORDER_LABELS = { lab: 'Lab test', imaging: 'Imaging', referral: 'Referral', other: 'Other' } as const;
@@ -64,13 +65,13 @@ export function DoctorVisitPage() {
 
   if (error && !detail) {
     return (
-      <div className="doctor">
-        <Link to="/doctor">← Patient queue</Link>
+      <div className="page">
+        <Link to="/doctor" className="back">← Patient queue</Link>
         <p className="error">{error}</p>
       </div>
     );
   }
-  if (!detail) return <p className="muted">Loading…</p>;
+  if (!detail) return <div className="page"><p className="muted">Loading…</p></div>;
 
   const { visit, notes, history } = detail;
   const ctas = visit.confirmedCtas ?? visit.suggestedCtas;
@@ -80,17 +81,19 @@ export function DoctorVisitPage() {
   const canAct = workable && (!holder || mine);
 
   return (
-    <div className="doctor">
-      <Link to="/doctor">← Patient queue</Link>
+    <div className="page page-wide">
+      <Link to="/doctor" className="back">← Patient queue</Link>
 
-      <div className="doctor-header">
+      <div className="work-head">
         <div>
+          <span className="eyebrow">Case #{visit.id} · Patient {visit.patientId} · checked in {time(visit.startedAt)}</span>
           <h1>{visit.complaint}</h1>
-          <p className="muted">
-            Patient {visit.patientId} · checked in {time(visit.startedAt)} · {STATUS_LABELS[visit.status] ?? visit.status}
-          </p>
         </div>
-        <span className={`ctas ctas-${ctas ?? 'none'}`}>{ctas ? `CTAS ${ctas} · ${CTAS_LABELS[ctas]}` : 'Not triaged'}</span>
+        <div className="row">
+          {visit.priority && <span className={`chip chip-${visit.priority}`}>{PRIORITY_LABELS[visit.priority]}</span>}
+          <span className="chip plain">{ctas ? `CTAS ${ctas} · ${CTAS_LABELS[ctas]}` : 'Not triaged'}</span>
+          <span className={`status status-${visit.status}`}>{STATUS_LABELS[visit.status] ?? visit.status}</span>
+        </div>
       </div>
 
       {visit.redFlags.length > 0 && (
@@ -104,37 +107,117 @@ export function DoctorVisitPage() {
         <section className="card claim-bar">
           {!holder && (
             <>
-              <span>Nobody has taken this case yet.</span>
+              <span className="muted">Nobody has taken this case yet.</span>
               <ActionButton label="Take this case" busyLabel="Taking…" onClick={() => act('claim')} />
             </>
           )}
-          {holder && mine && <span>✓ You are handling this case.</span>}
-          {holder && !mine && <span>{holder.name} is handling this case. You can read it and add private notes.</span>}
+          {holder && mine && <span><span className="dot dot-slate" aria-hidden="true" /> You are handling this case.</span>}
+          {holder && !mine && <span className="muted">{holder.name} is handling this case. You can read it and add private notes.</span>}
         </section>
       )}
 
-      {canAct && <ActionPanel act={act} status={visit.status} suggestedCtas={visit.suggestedCtas} />}
+      <div className="work">
+        {/* Left half: the patient's own words, in order. */}
+        <section className="card work-chat">
+          <div className="card-head">
+            <h2>Intake conversation</h2>
+            <span className="mono faint">{visit.messages.length} messages</span>
+          </div>
+          <ol className="chat-panel">
+            <li className="chat-stamp">Checked in · {time(visit.startedAt)}</li>
+            <li className="msg msg-patient">
+              <span className="msg-icon" aria-hidden="true">Pt</span>
+              <div className="msg-main">
+                <div className="msg-head"><strong>Patient</strong><span className="msg-tag">Complaint</span></div>
+                <div className="msg-body">{visit.complaint}</div>
+              </div>
+            </li>
+            {visit.premadeAnswers.length > 0 && (
+              <li className="card-inset">
+                <dl className="qa">
+                  {visit.premadeAnswers.map((qa, i) => <div key={i}><dt>{qa.question}</dt><dd>{qa.answer}</dd></div>)}
+                </dl>
+              </li>
+            )}
+            {visit.messages.map((m, i) => (
+              <li key={i} className={`msg msg-${m.from}`}>
+                <span className="msg-icon" aria-hidden="true">{m.from === 'patient' ? 'Pt' : m.from === 'doctor' ? 'Dr' : '+'}</span>
+                <div className="msg-main">
+                  <div className="msg-head">
+                    <strong>{SENDER_LABELS[m.from]}</strong>
+                    {m.from === 'ai' && <span className="msg-tag">AI</span>}
+                    <span className="msg-time">{time(m.sentAt)}</span>
+                  </div>
+                  <div className="msg-body">{m.text}</div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
 
-      <div className="doctor-grid">
-        <div className="doctor-main">
-          {visit.appointment && (
-            <section className="card">
-              <h2>In-person appointment</h2>
-              <p>
-                {visit.appointment.location} · {visit.appointment.doctorName} ·{' '}
-                {visit.appointment.status === 'booked' ? 'booked' : 'waiting for the patient to pick a time'}
-              </p>
-              <ul className="slots">
+        {/* Right half: four clinical panels, then the doctor's one answer. */}
+        <div className="quads">
+          <section className="card quad">
+            <div className="quad-head"><h2>AI intake summary</h2><span className="eyebrow">For review</span></div>
+            {visit.soap ? (
+              <dl className="qa">
+                <div><dt>Subjective</dt><dd>{visit.soap.subjective}</dd></div>
+                <div><dt>Assessment</dt><dd>{visit.soap.assessment}</dd></div>
+                <div><dt>Plan</dt><dd>{visit.soap.plan}</dd></div>
+              </dl>
+            ) : (
+              <p className="muted">No summary yet. The patient may still be answering.</p>
+            )}
+            {visit.priorityReasons.length > 0 && (
+              <div className="reasons">{visit.priorityReasons.map((r) => <span key={r} className="reason">{r}</span>)}</div>
+            )}
+            <p className="small faint">Written by the intake assistant. Not a diagnosis.</p>
+          </section>
+
+          <section className="card quad">
+            <div className="quad-head"><h2>Patient history</h2><span className="eyebrow">On file</span></div>
+            <dl className="qa">
+              <div><dt>Allergies</dt><dd>{list(history?.allergies)}</dd></div>
+              <div><dt>Current medications</dt><dd>{list(history?.currentMeds)}</dd></div>
+              <div><dt>Conditions</dt><dd>{list(history?.conditions)}</dd></div>
+            </dl>
+            <span className="eyebrow">Past visits</span>
+            {!history?.pastVisits.length && <p className="muted small">None on file.</p>}
+            {history?.pastVisits.map((v, i) => (
+              <div key={i} className="entry">
+                <strong>{v.complaint}</strong>
+                <span className="mono">{v.date}</span>
+                {v.diagnosis && <span>Diagnosis: {v.diagnosis}</span>}
+                {v.prescriptions?.length ? <span>Prescribed: {v.prescriptions.join(', ')}</span> : null}
+                {v.plan && <span className="muted">{v.plan}</span>}
+              </div>
+            ))}
+          </section>
+
+          <section className="card quad">
+            <div className="quad-head"><h2>Private notes</h2><span className="eyebrow">Doctors only</span></div>
+            <p className="small faint">Never shown to the patient or the AI.</p>
+            {notes.map((n, i) => (
+              <div key={i} className="entry">
+                <span>{n.text}</span>
+                <span className="mono">{n.doctorName} · {time(n.writtenAt)}</span>
+              </div>
+            ))}
+            <NoteForm act={act} />
+          </section>
+
+          <section className="card quad">
+            <div className="quad-head"><h2>Outcome</h2><span className="eyebrow">This visit</span></div>
+            {visit.appointment && (
+              <div className="entry">
+                <strong>In person · {visit.appointment.status === 'booked' ? 'booked' : 'waiting for the patient to pick'}</strong>
+                <span>{visit.appointment.location} · {visit.appointment.doctorName}</span>
                 {visit.appointment.slots.map((s) => (
-                  <li key={s.id} className={s.chosen ? 'chosen' : ''}>{time(s.startsAt)}{s.chosen && ' ✓ chosen'}</li>
+                  <span key={s.id} className={s.chosen ? 'accent mono' : 'mono'}>{time(s.startsAt)}{s.chosen && ' · chosen'}</span>
                 ))}
-              </ul>
-            </section>
-          )}
-
-          {visit.status === 'resolved' && (
-            <section className="card">
-              <h2>Outcome</h2>
+              </div>
+            )}
+            {visit.status === 'resolved' && (
               <dl className="qa">
                 <div><dt>Diagnosis</dt><dd>{visit.diagnosis}</dd></div>
                 <div>
@@ -143,102 +226,32 @@ export function DoctorVisitPage() {
                 </div>
                 <div><dt>Closed by</dt><dd>{visit.doctor?.name} · {time(visit.resolvedAt)}</dd></div>
               </dl>
-            </section>
-          )}
-
-          <section className="card">
-            <h2>Symptoms reported at check-in</h2>
-            <p><strong>Main complaint:</strong> {visit.complaint}</p>
-            {visit.premadeAnswers.length > 0 ? (
-              <dl className="qa">
-                {visit.premadeAnswers.map((qa, i) => <div key={i}><dt>{qa.question}</dt><dd>{qa.answer}</dd></div>)}
-              </dl>
-            ) : (
-              <p className="muted">No check-in answers recorded.</p>
+            )}
+            {visit.prescriptions.map((p, i) => (
+              <div key={`rx${i}`} className="entry">
+                <strong>℞ {p.medication} {p.dose}</strong>
+                <span>{p.frequency} · {p.duration}{p.instructions && ` · ${p.instructions}`}</span>
+                <span className="mono">{p.doctorName} · {time(p.prescribedAt)}</span>
+              </div>
+            ))}
+            {visit.orders.map((o, i) => (
+              <div key={`o${i}`} className="entry">
+                <strong>{ORDER_LABELS[o.type]}: {o.name}</strong>
+                {o.instructions && <span>{o.instructions}</span>}
+                <span className="mono">{o.doctorName} · {time(o.orderedAt)}</span>
+              </div>
+            ))}
+            {!visit.appointment && visit.status !== 'resolved' && !visit.prescriptions.length && !visit.orders.length && (
+              <p className="muted small">Nothing sent yet. Reply, offer a time, or escalate below.</p>
             )}
           </section>
 
-          {visit.soap && (
-            <section className="card">
-              <h2>AI intake summary</h2>
-              <p className="muted small">Written by the intake assistant for doctor review. Not a diagnosis.</p>
-              <dl className="qa">
-                <div><dt>Subjective</dt><dd>{visit.soap.subjective}</dd></div>
-                <div><dt>Assessment</dt><dd>{visit.soap.assessment}</dd></div>
-                <div><dt>Plan</dt><dd>{visit.soap.plan}</dd></div>
-              </dl>
-            </section>
-          )}
-
-          <section className="card">
-            <h2>Conversation</h2>
-            {visit.messages.length === 0 && <p className="muted">No messages yet.</p>}
-            <ol className="chat">
-              {visit.messages.map((m, i) => (
-                <li key={i} className={`chat-msg from-${m.from}`}>
-                  <span className="chat-meta">{SENDER_LABELS[m.from]} · {time(m.sentAt)}</span>
-                  <span>{m.text}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          {(visit.prescriptions.length > 0 || visit.orders.length > 0) && (
-            <section className="card">
-              <h2>Prescriptions and tests</h2>
-              {visit.prescriptions.map((p, i) => (
-                <div key={`rx${i}`} className="past-visit">
-                  <strong>℞ {p.medication} {p.dose}</strong>
-                  <span>{p.frequency} · {p.duration}{p.instructions && ` · ${p.instructions}`}</span>
-                  <span className="muted small">{p.doctorName} · {time(p.prescribedAt)}</span>
-                </div>
-              ))}
-              {visit.orders.map((o, i) => (
-                <div key={`o${i}`} className="past-visit">
-                  <strong>{ORDER_LABELS[o.type]}: {o.name}</strong>
-                  {o.instructions && <span>{o.instructions}</span>}
-                  <span className="muted small">{o.doctorName} · {time(o.orderedAt)}</span>
-                </div>
-              ))}
-            </section>
+          {canAct && (
+            <div className="quad-wide">
+              <ActionPanel act={act} status={visit.status} suggestedCtas={visit.suggestedCtas} />
+            </div>
           )}
         </div>
-
-        <aside className="doctor-side">
-          <section className="card">
-            <h2>Patient</h2>
-            <dl className="qa">
-              <div><dt>Allergies</dt><dd>{list(history?.allergies)}</dd></div>
-              <div><dt>Current medications</dt><dd>{list(history?.currentMeds)}</dd></div>
-              <div><dt>Conditions</dt><dd>{list(history?.conditions)}</dd></div>
-            </dl>
-          </section>
-
-          <section className="card">
-            <h2>Private doctor notes</h2>
-            <p className="muted small">Only doctors see these. Never shown to the patient or the AI.</p>
-            {notes.map((n, i) => (
-              <div key={i} className="past-visit">
-                <span>{n.text}</span>
-                <span className="muted small">{n.doctorName} · {time(n.writtenAt)}</span>
-              </div>
-            ))}
-            <NoteForm act={act} />
-          </section>
-
-          <section className="card">
-            <h2>Past visits</h2>
-            {!history?.pastVisits.length && <p className="muted">None on file.</p>}
-            {history?.pastVisits.map((v, i) => (
-              <div key={i} className="past-visit">
-                <strong>{v.date}: {v.complaint}</strong>
-                {v.diagnosis && <span>Diagnosis: {v.diagnosis}</span>}
-                {v.prescriptions?.length ? <span>Prescribed: {v.prescriptions.join(', ')}</span> : null}
-                {v.plan && <span className="muted">{v.plan}</span>}
-              </div>
-            ))}
-          </section>
-        </aside>
       </div>
     </div>
   );
@@ -277,7 +290,8 @@ function ActionPanel({ act, status, suggestedCtas }: { act: Act; status: string;
   const current = visible.some((t) => t.id === tab) ? tab : visible[0].id;
 
   return (
-    <section className="card actions">
+    <section className="card quad">
+      <div className="quad-head"><h2>Your answer</h2><span className="eyebrow">Sent once</span></div>
       {status === 'appointment_offered' && (
         <p className="muted">Waiting for the patient to pick an appointment time. You can still escalate.</p>
       )}
@@ -405,7 +419,7 @@ function ReplyForm({ act, suggestedCtas }: { act: Act; suggestedCtas: number | n
           </div>
         ))}
         {rxs.length < 10 && (
-          <button type="button" className="btn btn-ghost" onClick={() => setRxs([...rxs, { ...EMPTY_RX }])}>+ Add prescription</button>
+          <button type="button" className="btn btn-secondary" onClick={() => setRxs([...rxs, { ...EMPTY_RX }])}>+ Add prescription</button>
         )}
       </fieldset>
 
@@ -427,7 +441,7 @@ function ReplyForm({ act, suggestedCtas }: { act: Act; suggestedCtas: number | n
           </div>
         ))}
         {orders.length < 10 && (
-          <button type="button" className="btn btn-ghost" onClick={() => setOrders([...orders, { ...EMPTY_ORDER }])}>+ Add test or referral</button>
+          <button type="button" className="btn btn-secondary" onClick={() => setOrders([...orders, { ...EMPTY_ORDER }])}>+ Add test or referral</button>
         )}
       </fieldset>
 

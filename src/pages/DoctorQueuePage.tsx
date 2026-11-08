@@ -7,8 +7,9 @@ import { CTAS_LABELS, callApi, formatTime, formatWait, type AppointmentItem, typ
 // Live updates refresh the lists right away; this is only a safety net if the stream drops.
 const REFRESH_MS = 60_000;
 type Tab = 'all' | 'unassigned' | 'mine' | 'appointments';
+export const PRIORITY_LABELS = { high: 'High priority', medium: 'Medium priority', low: 'Low priority' } as const;
 
-/** Cases waiting for an answer (most urgent first) and in-person appointments. */
+/** Cases waiting for an answer (highest priority first, then longest wait) and in-person appointments. */
 export function DoctorQueuePage() {
   const { getToken, doctor } = useAuth();
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
@@ -49,74 +50,97 @@ export function DoctorQueuePage() {
     { id: 'appointments', label: 'Appointments', count: appointments?.length ?? 0 },
   ];
   const shown = (queue ?? []).filter((q) => inTab(q, tab));
+  const high = (queue ?? []).filter((q) => q.priority === 'high').length;
 
   return (
-    <div className="doctor">
-      <div className="doctor-header">
+    <div className="page">
+      <div className="page-head">
         <div>
+          <span className="eyebrow">Priority sort · AI rated, rules can only raise it</span>
           <h1>Patient queue</h1>
-          <p className="muted">Most urgent first, then longest wait. Updates live.</p>
         </div>
-        <button className="btn btn-ghost" onClick={() => void load()}>Refresh</button>
+        <div className="row">
+          {queue && <span className="on-duty"><span className="dot" aria-hidden="true" />{queue.length} waiting · {high} high</span>}
+          <button className="btn btn-secondary" onClick={() => void load()}>Refresh</button>
+        </div>
       </div>
 
       {error && <p className="error">{error}</p>}
       {queue === null && !error && <p className="muted">Loading…</p>}
       {queue && (
-        <div className="tabs" role="tablist">
-          {tabs.map((t) => (
-            <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'tab active' : 'tab'} onClick={() => setTab(t.id)}>
-              {t.label} <span className="tab-count">{t.count}</span>
-            </button>
-          ))}
+        <div className="queue-tools">
+          <div className="tabs" role="tablist">
+            {tabs.map((t) => (
+              <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'tab active' : 'tab'} onClick={() => setTab(t.id)}>
+                {t.label} <span className="tab-count">{t.count}</span>
+              </button>
+            ))}
+          </div>
+          <span className="mono faint">Updates live</span>
         </div>
       )}
 
       {tab === 'appointments' ? (
-        <>
-          {appointments?.length === 0 && <div className="card"><p>No in-person appointments.</p></div>}
-          <ul className="queue">
-            {appointments?.map((a) => (
-              <li key={a.visitId}>
-                <Link to={`/doctor/visits/${a.visitId}`} className="queue-item">
-                  <span className={a.status === 'booked' ? 'pill pill-booked' : 'pill'}>{a.status === 'booked' ? 'Booked' : 'Offered'}</span>
-                  <span className="queue-main">
-                    <strong>{a.complaint}</strong>
-                    <span className="muted">
-                      {a.status === 'booked' ? formatTime(a.time) : `Waiting for the patient to pick (earliest ${formatTime(a.time)})`} · {a.location} · {a.doctorName}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </>
+        <div className="queue-list">
+          {appointments?.length === 0 && <div className="empty">No in-person appointments.</div>}
+          {appointments?.map((a) => (
+            <Link key={a.visitId} to={`/doctor/visits/${a.visitId}`} className="qcard">
+              <div className="qcard-head">
+                <div className="grow">
+                  <div className="qcard-title">{a.complaint}</div>
+                  <div className="qcard-meta"><span>Patient {a.patientId}</span><span>{a.location}</span><span>{a.doctorName}</span></div>
+                </div>
+                <span className={a.status === 'booked' ? 'chip chip-low' : 'chip chip-medium'}>{a.status === 'booked' ? 'Booked' : 'Offered'}</span>
+              </div>
+              <div className="qcard-foot">
+                <span>{a.status === 'booked' ? `Booked for ${formatTime(a.time)}` : `Waiting for the patient to pick · earliest ${formatTime(a.time)}`}</span>
+                <span className="accent">Open →</span>
+              </div>
+            </Link>
+          ))}
+        </div>
       ) : (
-        <>
-          {queue && shown.length === 0 && <div className="card"><p>{queue.length === 0 ? 'No patients are waiting right now.' : 'No requests here.'}</p></div>}
-          <ul className="queue">
-            {shown.map((item) => {
-              const mine = item.assignedDoctor?.id === doctor?.id;
-              return (
-                <li key={item.visitId}>
-                  <Link to={`/doctor/visits/${item.visitId}`} className="queue-item">
-                    <span className={`ctas ctas-${item.suggestedCtas ?? 'none'}`} title={item.suggestedCtas ? CTAS_LABELS[item.suggestedCtas] : 'Not triaged'}>
-                      {item.suggestedCtas ? `CTAS ${item.suggestedCtas}` : 'CTAS ?'}
+        <div className="queue-list">
+          {queue && shown.length === 0 && <div className="empty">{queue.length === 0 ? 'No patients are waiting right now.' : 'No requests here.'}</div>}
+          {shown.map((item) => {
+            const mine = item.assignedDoctor?.id === doctor?.id;
+            return (
+              <Link key={item.visitId} to={`/doctor/visits/${item.visitId}`} className={`qcard prio-${item.priority}`}>
+                <div className="qcard-head">
+                  <div className="grow">
+                    <div className="qcard-title">{item.complaint}</div>
+                    <div className="qcard-meta">
+                      <span>Patient {item.patientId}</span>
+                      <span>Case #{item.visitId}</span>
+                      <span>Waiting {formatWait(item.waitingMinutes)}</span>
+                    </div>
+                  </div>
+                  <div className="qcard-side">
+                    <span className={`chip chip-${item.priority}`}>{PRIORITY_LABELS[item.priority]}</span>
+                    <span className="chip plain" title={item.suggestedCtas ? CTAS_LABELS[item.suggestedCtas] : 'Not triaged'}>
+                      {item.suggestedCtas ? `CTAS ${item.suggestedCtas} · AI` : 'CTAS ?'}
                     </span>
-                    <span className="queue-main">
-                      <strong>{item.complaint}</strong>
-                      <span className="muted">
-                        Waiting {formatWait(item.waitingMinutes)}
-                        {item.assignedDoctor && ` · ${mine ? 'assigned to you' : item.assignedDoctor.name}`}
-                      </span>
-                    </span>
-                    {item.unreadForDoctor > 0 && <span className="badge">{item.unreadForDoctor} new</span>}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </>
+                  </div>
+                </div>
+                {item.priorityReasons.length > 0 && (
+                  <div className="reasons" title="Why this priority">
+                    {item.priorityReasons.map((r) => <span key={r} className="reason">{r}</span>)}
+                  </div>
+                )}
+                <div className="qcard-foot">
+                  <span>
+                    <span className={item.assignedDoctor ? 'dot dot-slate' : 'dot'} aria-hidden="true" />{' '}
+                    {item.assignedDoctor ? (mine ? 'Assigned to you' : `With ${item.assignedDoctor.name}`) : 'AI intake complete · not taken'}
+                  </span>
+                  <span className="row">
+                    {item.unreadForDoctor > 0 && <span className="badge">{item.unreadForDoctor}</span>}
+                    <span className="accent">Open case →</span>
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       )}
     </div>
   );
