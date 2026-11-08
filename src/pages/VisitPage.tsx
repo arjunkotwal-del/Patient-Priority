@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Bubble, ComposerCard, Composer, Suggestions, Typing } from '../components/Chat';
 import { notifyIfHidden, subscribeToUpdates } from '../lib/live';
-import { PATIENT_STATUS, TRIAGE_MESSAGE, callApi, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
+import { PATIENT_STATUS, callApi, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
 
 const ORDER_LABELS = { lab: 'Lab test', imaging: 'Imaging', referral: 'Referral', other: 'Other' } as const;
 
@@ -60,7 +60,6 @@ export function VisitPage() {
     );
   }
   if (!visit) return <div className="page page-narrow"><p className="muted">Loading…</p></div>;
-  if (visit.status === 'escalated') return <TriageScreen />;
 
   const interviewing = visit.status === 'interviewing';
   const last = visit.messages.at(-1);
@@ -141,6 +140,12 @@ export function VisitPage() {
       {visit.status === 'appointment_offered' && <AppointmentPicker visit={visit} path={path} onBooked={setVisit} reload={load} />}
       {visit.status === 'appointment_booked' && <Booked visit={visit} />}
       {visit.status === 'resolved' && <Plan visit={visit} />}
+      {visit.status === 'escalated' && (
+        <section className="card stack-sm">
+          <h2>Your doctor would like to see you in person</h2>
+          <p className="muted">Please check in at the front desk and show them this page.</p>
+        </section>
+      )}
 
       {interviewing ? (
         <Composer
@@ -152,20 +157,6 @@ export function VisitPage() {
       ) : (
         <ClosedChat replied={visit.status !== 'waiting_for_doctor'} />
       )}
-    </div>
-  );
-}
-
-/** Shown on any red flag or AI failure. Nothing else: no reason, no diagnosis. */
-function TriageScreen() {
-  return (
-    <div className="page">
-      <div className="triage" role="alert">
-        <div className="triage-icon" aria-hidden>!</div>
-        <h1>{TRIAGE_MESSAGE}</h1>
-        <p className="muted">Show this screen to the nurse at the desk.</p>
-        <Link to="/visits" className="btn btn-secondary">Back to main chat</Link>
-      </div>
     </div>
   );
 }

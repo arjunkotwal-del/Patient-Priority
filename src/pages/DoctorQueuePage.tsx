@@ -56,7 +56,7 @@ export function DoctorQueuePage() {
     <div className="page">
       <div className="page-head">
         <div>
-          <span className="eyebrow">Priority sort · AI rated, rules can only raise it</span>
+          <span className="eyebrow">Red flags first, then priority · AI rated, rules can only raise it</span>
           <h1>Patient queue</h1>
         </div>
         <div className="row">
@@ -105,7 +105,7 @@ export function DoctorQueuePage() {
           {shown.map((item) => {
             const mine = item.assignedDoctor?.id === doctor?.id;
             return (
-              <Link key={item.visitId} to={`/doctor/visits/${item.visitId}`} className={`qcard prio-${item.priority}`}>
+              <Link key={item.visitId} to={`/doctor/visits/${item.visitId}`} className={`qcard prio-${item.priority}${item.redFlags.length ? ' flagged' : ''}`}>
                 <div className="qcard-head">
                   <div className="grow">
                     <div className="qcard-title">{item.complaint}</div>
@@ -116,6 +116,7 @@ export function DoctorQueuePage() {
                     </div>
                   </div>
                   <div className="qcard-side">
+                    {item.redFlags.length > 0 && <span className="chip chip-danger">Red flag</span>}
                     <span className={`chip chip-${item.priority}`}>{PRIORITY_LABELS[item.priority]}</span>
                     <span className="chip plain" title={item.suggestedCtas ? CTAS_LABELS[item.suggestedCtas] : 'Not triaged'}>
                       {item.suggestedCtas ? `CTAS ${item.suggestedCtas} · AI` : 'CTAS ?'}

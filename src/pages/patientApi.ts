@@ -34,10 +34,8 @@ export const PATIENT_STATUS: Record<CaseStatus, string> = {
   appointment_offered: 'Pick a time',
   appointment_booked: 'Booked',
   resolved: 'Plan ready',
-  escalated: 'Go to triage',
+  escalated: 'See the front desk',
 };
-
-export const TRIAGE_MESSAGE = 'Please go to the triage desk now.';
 
 /** Times come from the server in UTC; show them in the patient's own time zone. */
 export const formatSlot = (iso: string) =>
