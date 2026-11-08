@@ -14,6 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import express from 'express';
 import * as db from './db.js';
+import { isDoctorUserId } from './doctorIds.js';
 
 const TICKET_TTL_MS = 30_000;
 const HEARTBEAT_MS = 25_000;
@@ -114,10 +115,11 @@ export const eventsRouter = express.Router();
 eventsRouter.post('/events/ticket', express.json({ limit: '1kb' }), async (req, res, next) => {
   try {
     if (req.body?.as === 'doctor') {
-      const doctor = await db.getDoctorByAuth0Id(req.userId);
+      const doctor = await db.getDoctorForUser(req.userId);
       if (!doctor) return res.status(403).json({ code: 'forbidden', message: 'Only doctors can do this.' });
       return res.json({ ticket: tickets.issue({ role: 'doctor', doctorId: doctor.id }), expiresIn: TICKET_TTL_MS / 1000 });
     }
+    if (isDoctorUserId(req.userId)) return res.status(403).json({ code: 'forbidden', message: 'Doctor accounts have no patient updates.' });
     const patientId = await db.getOrCreatePatientId(req.userId);
     res.json({ ticket: tickets.issue({ role: 'patient', patientId }), expiresIn: TICKET_TTL_MS / 1000 });
   } catch (err) {

@@ -21,7 +21,7 @@ export type Verification =
       verifiedAt: string;
     };
 
-/** A doctor account, as linked in our database. */
+/** A doctor account, as stored in our database. */
 export interface Doctor {
   id: string;
   name: string;
@@ -31,24 +31,29 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   error: Error | undefined;
-  /** Redirects to Auth0's hosted login page. */
+  /** Patients: redirects to Auth0's hosted login page. */
   login: (returnTo?: string) => Promise<void>;
-  /** Redirects to Auth0's hosted sign-up page. */
+  /** Patients: redirects to Auth0's hosted sign-up page. */
   signup: (returnTo?: string) => Promise<void>;
+  /**
+   * Doctors: logs in with an existing email and password (made by npm run doctor:add).
+   * There is no doctor sign-up. Throws the server's message on failure.
+   */
+  doctorLogin: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  /** Display name is stored locally per user; email comes from Auth0. */
+  /** Display name is stored locally per user; email comes from Auth0. Patients only. */
   updateUser: (changes: Pick<Partial<User>, 'name'>) => void;
-  /** Access token for calling our /api routes. */
+  /** Token for calling our /api routes (Auth0 for patients, our doctor session for doctors). */
   getToken: () => Promise<string>;
-  /** null while loading or when the status couldn't be fetched. */
+  /** Patients only. null while loading or when the status couldn't be fetched. */
   verification: Verification | null;
   verificationLoading: boolean;
   verificationError: string | null;
   refreshVerification: () => Promise<void>;
   setVerification: (v: Verification) => void;
-  /** The doctor record for this login, or null for patients. Checked by the server. */
+  /** The logged-in doctor, or null for patients. */
   doctor: Doctor | null;
-  /** True until we know whether this login is a doctor. */
+  /** True while a saved doctor session is being re-checked with the server. */
   doctorLoading: boolean;
   doctorError: string | null;
 }
@@ -77,28 +82,96 @@ function writeName(id: string, name: string) {
   }
 }
 
+// ---- Doctor session (our own login, not Auth0) ----
+
+interface DoctorSession {
+  token: string;
+  expiresAt: string;
+  doctor: Doctor;
+  email: string;
+}
+
+const SESSION_KEY = 'pp.doctorSession';
+const expired = (s: DoctorSession) => Date.parse(s.expiresAt) <= Date.now();
+
+function readSession(): DoctorSession | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null') as DoctorSession | null;
+    return s?.token && s.doctor?.id && !expired(s) ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(s: DoctorSession | null) {
+  try {
+    if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    else localStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* storage unavailable; the session lasts until this tab closes */
+  }
+}
+
 function AuthBridge({ children }: { children: ReactNode }) {
   const auth0 = useAuth0();
   const [nameOverride, setNameOverride] = useState<string | null>(null);
   const [verification, setVerification] = useState<Verification | null>(null);
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
-  // undefined = not checked yet for this login.
-  const [doctor, setDoctor] = useState<Doctor | null | undefined>(undefined);
+  const [session, setSession] = useState<DoctorSession | null>(readSession);
+  // A session restored from storage is re-checked once (the doctor may have been removed).
+  const [sessionChecked, setSessionChecked] = useState(() => readSession() === null);
   const [doctorError, setDoctorError] = useState<string | null>(null);
 
-  const id = auth0.isAuthenticated ? auth0.user?.sub : undefined;
+  // Auth0 logins are always patients. A doctor session wins if both somehow exist.
+  const patientId = !session && auth0.isAuthenticated ? auth0.user?.sub : undefined;
   const { getAccessTokenSilently } = auth0;
 
+  const endSession = useCallback(() => {
+    saveSession(null);
+    setSession(null);
+    setSessionChecked(true);
+  }, []);
+
   useEffect(() => {
-    setNameOverride(id ? readName(id) : null);
-  }, [id]);
+    setNameOverride(patientId ? readName(patientId) : null);
+  }, [patientId]);
 
   const getToken = useCallback(async () => {
+    if (session) {
+      if (expired(session)) {
+        endSession();
+        throw new Error('Your session ended. Please log in again.');
+      }
+      return session.token;
+    }
     const token = await getAccessTokenSilently();
     if (!token) throw new Error('Could not get an access token. Please log in again.');
     return token;
-  }, [getAccessTokenSilently]);
+  }, [session, endSession, getAccessTokenSilently]);
+
+  // Re-check a restored doctor session once. A 401/403 means it's no longer valid.
+  useEffect(() => {
+    if (!session || sessionChecked) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/doctor/me', { headers: { Authorization: `Bearer ${session.token}` } });
+        const body = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.status === 401 || res.status === 403 || (res.ok && !body?.doctor)) return endSession();
+        if (!res.ok) throw new Error(body?.message ?? `Server error (${res.status})`);
+        setDoctorError(null);
+      } catch (err) {
+        if (!cancelled) setDoctorError(err instanceof Error ? err.message : 'Could not check your account.');
+      } finally {
+        if (!cancelled) setSessionChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session, sessionChecked, endSession]);
 
   const refreshVerification = useCallback(async () => {
     setVerificationLoading(true);
@@ -118,43 +191,39 @@ function AuthBridge({ children }: { children: ReactNode }) {
     }
   }, [getToken]);
 
+  // Only patients have a health card. Doctors never fetch or store one.
+  const isPatient = !!patientId;
   useEffect(() => {
-    if (id) void refreshVerification();
+    if (isPatient) void refreshVerification();
     else setVerification(null);
-  }, [id, refreshVerification]);
+  }, [isPatient, refreshVerification]);
 
-  // Ask the server whether this login is a doctor. Only the server can decide this.
-  useEffect(() => {
-    setDoctor(undefined);
+  const doctorLogin = useCallback(async (email: string, password: string) => {
+    const res = await fetch('/api/doctor/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(body?.message ?? `Server error (${res.status})`);
+    const next: DoctorSession = { token: body.token, expiresAt: body.expiresAt, doctor: body.doctor, email: body.email };
+    saveSession(next);
     setDoctorError(null);
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch('/api/doctor/me', { headers: { Authorization: `Bearer ${await getToken()}` } });
-        const body = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(body?.message ?? `Server error (${res.status})`);
-        if (!cancelled) setDoctor((body?.doctor as Doctor | null) ?? null);
-      } catch (err) {
-        if (cancelled) return;
-        setDoctor(null);
-        setDoctorError(err instanceof Error ? err.message : 'Could not check your account type.');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, getToken]);
+    setSessionChecked(true);
+    setSession(next);
+  }, []);
 
-  const user: User | null =
-    id && auth0.user
-      ? {
-          id,
-          email: auth0.user.email ?? '',
-          name: nameOverride ?? auth0.user.name ?? auth0.user.email?.split('@')[0] ?? 'User',
-          picture: auth0.user.picture,
-        }
-      : null;
+  let user: User | null = null;
+  if (session) {
+    user = { id: `doctor|${session.doctor.id}`, email: session.email, name: session.doctor.name };
+  } else if (patientId && auth0.user) {
+    user = {
+      id: patientId,
+      email: auth0.user.email ?? '',
+      name: nameOverride ?? auth0.user.name ?? auth0.user.email?.split('@')[0] ?? 'User',
+      picture: auth0.user.picture,
+    };
+  }
 
   const redirect = (screen_hint: 'login' | 'signup', returnTo = '/home') =>
     auth0.loginWithRedirect({
@@ -164,25 +233,29 @@ function AuthBridge({ children }: { children: ReactNode }) {
 
   const value: AuthContextValue = {
     user,
-    isLoading: auth0.isLoading,
-    error: auth0.error,
+    isLoading: session ? false : auth0.isLoading,
+    error: session ? undefined : auth0.error,
     login: (returnTo) => redirect('login', returnTo),
     signup: (returnTo) => redirect('signup', returnTo),
-    logout: () => auth0.logout({ logoutParams: { returnTo: window.location.origin } }),
+    doctorLogin,
+    logout: () => {
+      if (session) return endSession();
+      auth0.logout({ logoutParams: { returnTo: window.location.origin } });
+    },
     updateUser: ({ name }) => {
-      if (!id || !name) return;
-      writeName(id, name);
+      if (!patientId || !name) return;
+      writeName(patientId, name);
       setNameOverride(name);
     },
     getToken,
     verification,
     // Treat "logged in but not fetched yet" as loading so guards don't redirect early.
-    verificationLoading: verificationLoading || (!!id && verification === null && verificationError === null),
+    verificationLoading: verificationLoading || (isPatient && verification === null && verificationError === null),
     verificationError,
     refreshVerification,
     setVerification,
-    doctor: doctor ?? null,
-    doctorLoading: !!id && doctor === undefined,
+    doctor: session?.doctor ?? null,
+    doctorLoading: !!session && !sessionChecked,
     doctorError,
   };
 

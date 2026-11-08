@@ -1,7 +1,8 @@
 // Auth0 helpers: verify the user's access token, and read/write their app_metadata
 // through the Management API using the server's machine-to-machine credentials.
 // app_metadata can only be written by the server, never by the user.
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from 'jose';
+import { verifyDoctorToken } from './doctorAuth.js';
 
 const env = (name) => {
   const v = process.env[name];
@@ -11,16 +12,25 @@ const env = (name) => {
 
 let jwks = null;
 
-/** Express middleware: requires a valid Auth0 access token for our API. Sets req.userId. */
+/**
+ * Express middleware: requires a valid login token for our API. Sets req.userId.
+ * Patients use Auth0 tokens (RS256). Doctors use our own doctor tokens (HS256, see doctorAuth.js),
+ * which give a userId of "doctor|<doctor id>". Each kind is checked with its own key and algorithm.
+ */
 export async function requireUser(req, res, next) {
   try {
-    const domain = env('AUTH0_DOMAIN');
-    jwks ??= createRemoteJWKSet(new URL(`https://${domain}/.well-known/jwks.json`));
     const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
     if (!token) return res.status(401).json({ code: 'unauthorized', message: 'Not logged in.' });
+    if (decodeProtectedHeader(token).alg === 'HS256') {
+      req.userId = await verifyDoctorToken(token);
+      return next();
+    }
+    const domain = env('AUTH0_DOMAIN');
+    jwks ??= createRemoteJWKSet(new URL(`https://${domain}/.well-known/jwks.json`));
     const { payload } = await jwtVerify(token, jwks, {
       issuer: `https://${domain}/`,
       audience: env('AUTH0_AUDIENCE'),
+      algorithms: ['RS256'],
     });
     if (!payload.sub) throw new Error('Token has no subject');
     req.userId = payload.sub;
@@ -71,26 +81,6 @@ export async function findUsersByCardHash(hash) {
   const q = encodeURIComponent(`app_metadata.health_card.hash:"${hash}"`);
   const users = await mgmtFetch(`/users?q=${q}&search_engine=v3&fields=user_id&include_fields=true`);
   return users.map((u) => u.user_id);
-}
-
-/** The Auth0 user ids for an email address (one per login method, e.g. password and Google). */
-export async function findUserIdsByEmail(email) {
-  const users = await mgmtFetch(`/users-by-email?email=${encodeURIComponent(email)}&fields=user_id&include_fields=true`);
-  return users.map((u) => u.user_id);
-}
-
-/** Creates an email + password login in the database connection and returns its user_id. */
-export async function createPasswordUser(email, password) {
-  const user = await mgmtFetch('/users', {
-    method: 'POST',
-    body: JSON.stringify({
-      email,
-      password,
-      connection: process.env.AUTH0_DB_CONNECTION || 'Username-Password-Authentication',
-      email_verified: true,
-    }),
-  });
-  return user.user_id;
 }
 
 export async function setHealthCard(userId, healthCard) {

@@ -4,6 +4,7 @@
 //   api.get('/visits/:id', requirePatient, requireOwnVisit, handler)   -> patient, own visits only
 //   api.get('/doctor/queue', requireDoctor, handler)                   -> doctors only
 import * as db from './db.js';
+import { isDoctorUserId } from './doctorIds.js';
 
 /** Builds the middleware. Tests pass fake lookups; the app uses the real database. */
 export function createAccess(lookups = db) {
@@ -19,15 +20,17 @@ export function createAccess(lookups = db) {
   };
 
   return {
-    /** Sets req.patientId for the logged-in user, creating their patient record on first use. */
-    requirePatient: handle(async (req, _res, next) => {
+    /** Sets req.patientId for the logged-in user, creating their patient record on first use. Doctors get 403. */
+    requirePatient: handle(async (req, res, next) => {
+      // Doctor logins never get a patient record (or a health card).
+      if (isDoctorUserId(req.userId)) return res.status(403).json({ code: 'forbidden', message: 'Doctor accounts cannot use the patient side.' });
       req.patientId = await lookups.getOrCreatePatientId(req.userId);
       next();
     }),
 
     /** Only lets doctors through. Sets req.doctor = { id, name }. */
     requireDoctor: handle(async (req, res, next) => {
-      const doctor = await lookups.getDoctorByAuth0Id(req.userId);
+      const doctor = await lookups.getDoctorForUser(req.userId);
       if (!doctor) return res.status(403).json({ code: 'forbidden', message: 'Only doctors can do this.' });
       req.doctor = doctor;
       next();

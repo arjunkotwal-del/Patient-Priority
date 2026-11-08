@@ -47,8 +47,13 @@ describe('runSummary', () => {
   it('returns the SOAP note for a minor case', async () => {
     stub(minor);
     assert.deepEqual(await runSummary(input), {
-      escalate: false, redFlags: [], suggestedCtas: 5, priority: 'low', priorityReasons: ['AI rated low: Mild'], soap,
+      escalate: false, redFlags: [], suggestedCtas: 5, priority: 'low', priorityReasons: ['AI rated low: Mild'], painScore: null, soap,
     });
+  });
+  it('keeps the pain score for the queue order', async () => {
+    stub(minor);
+    const result = await runSummary({ ...input, transcript: [{ question: 'On a scale of 1 to 10, how bad is the pain?', answer: '6' }] });
+    assert.equal(result.painScore, 6);
   });
   it('lets a keyword raise the AI priority', async () => {
     stub(minor);

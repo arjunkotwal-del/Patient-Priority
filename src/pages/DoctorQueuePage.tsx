@@ -1,32 +1,30 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { subscribeToUpdates } from '../lib/live';
-import { CTAS_LABELS, callApi, formatTime, formatWait, type AppointmentItem, type QueueItem } from './doctorApi';
+import { DoctorCase } from './DoctorCase';
+import { CTAS_LABELS, PRIORITY_LABELS, callApi, formatWait, type QueueItem } from './doctorApi';
 
-// Live updates refresh the lists right away; this is only a safety net if the stream drops.
+// Live updates refresh the queue right away; this is only a safety net if the stream drops.
 const REFRESH_MS = 60_000;
-type Tab = 'all' | 'unassigned' | 'mine' | 'appointments';
 
-/** Cases waiting for an answer (most urgent first) and in-person appointments. */
+/**
+ * The doctor's only page: the queue, worst first (priority, then CTAS, then pain, then wait;
+ * the server sorts it, see getQueue in server/db.js).
+ * The case at the front is opened in full so the doctor can give advice or schedule a
+ * meeting. The rest are shown below in order and can't be skipped to.
+ */
 export function DoctorQueuePage() {
   const { getToken, doctor } = useAuth();
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
-  const [appointments, setAppointments] = useState<AppointmentItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>('all');
 
   const load = useCallback(async () => {
     try {
-      const [q, a] = await Promise.all([
-        callApi<{ queue: QueueItem[] }>(getToken, '/doctor/queue'),
-        callApi<{ appointments: AppointmentItem[] }>(getToken, '/doctor/appointments'),
-      ]);
+      const q = await callApi<{ queue: QueueItem[] }>(getToken, '/doctor/queue');
       setQueue(q.queue);
-      setAppointments(a.appointments);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load patient requests.');
+      setError(err instanceof Error ? err.message : 'Could not load the queue.');
     }
   }, [getToken]);
 
@@ -40,83 +38,53 @@ export function DoctorQueuePage() {
     };
   }, [load, getToken]);
 
-  const inTab = (q: QueueItem, t: Tab) =>
-    t === 'all' ? true : t === 'mine' ? q.assignedDoctor?.id === doctor?.id : t === 'unassigned' ? !q.assignedDoctor : false;
-  const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: 'all', label: 'All waiting', count: queue?.length ?? 0 },
-    { id: 'unassigned', label: 'Not taken', count: (queue ?? []).filter((q) => inTab(q, 'unassigned')).length },
-    { id: 'mine', label: 'Mine', count: (queue ?? []).filter((q) => inTab(q, 'mine')).length },
-    { id: 'appointments', label: 'Appointments', count: appointments?.length ?? 0 },
-  ];
-  const shown = (queue ?? []).filter((q) => inTab(q, tab));
+  // The first case this doctor can work on: unclaimed, or already theirs.
+  // A case another doctor is handling stays in line but is skipped here.
+  const current = queue?.find((q) => !q.assignedDoctor || q.assignedDoctor.id === doctor?.id) ?? null;
+  const upNext = (queue ?? []).filter((q) => q !== current);
 
   return (
     <div className="doctor">
       <div className="doctor-header">
         <div>
           <h1>Patient queue</h1>
-          <p className="muted">Most urgent first, then longest wait. Updates live.</p>
+          <p className="muted">
+            {queue ? `${queue.length} waiting · ` : ''}Worst first: priority, then CTAS, then pain, then longest wait. Updates live.
+          </p>
         </div>
-        <button className="btn btn-ghost" onClick={() => void load()}>Refresh</button>
       </div>
 
       {error && <p className="error">{error}</p>}
       {queue === null && !error && <p className="muted">Loading…</p>}
-      {queue && (
-        <div className="tabs" role="tablist">
-          {tabs.map((t) => (
-            <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'tab active' : 'tab'} onClick={() => setTab(t.id)}>
-              {t.label} <span className="tab-count">{t.count}</span>
-            </button>
-          ))}
-        </div>
+      {queue && queue.length === 0 && <div className="card"><p>No patients are waiting right now.</p></div>}
+      {queue && queue.length > 0 && !current && (
+        <div className="card"><p>Every waiting case is being handled by another doctor.</p></div>
       )}
 
-      {tab === 'appointments' ? (
-        <>
-          {appointments?.length === 0 && <div className="card"><p>No in-person appointments.</p></div>}
-          <ul className="queue">
-            {appointments?.map((a) => (
-              <li key={a.visitId}>
-                <Link to={`/doctor/visits/${a.visitId}`} className="queue-item">
-                  <span className={a.status === 'booked' ? 'pill pill-booked' : 'pill'}>{a.status === 'booked' ? 'Booked' : 'Offered'}</span>
-                  <span className="queue-main">
-                    <strong>{a.complaint}</strong>
-                    <span className="muted">
-                      {a.status === 'booked' ? formatTime(a.time) : `Waiting for the patient to pick (earliest ${formatTime(a.time)})`} · {a.location} · {a.doctorName}
-                    </span>
+      {current && <DoctorCase key={current.visitId} item={current} onDone={load} />}
+
+      {upNext.length > 0 && (
+        <section aria-labelledby="up-next">
+          <h2 id="up-next">Up next</h2>
+          <ol className="queue">
+            {upNext.map((item) => (
+              <li key={item.visitId} className="queue-item queue-item-static">
+                <span className={`priority priority-${item.priority}`}>{PRIORITY_LABELS[item.priority]}</span>
+                <span className={`ctas ctas-${item.suggestedCtas ?? 'none'}`} title={item.suggestedCtas ? CTAS_LABELS[item.suggestedCtas] : 'Not triaged'}>
+                  {item.suggestedCtas ? `CTAS ${item.suggestedCtas}` : 'CTAS ?'}
+                </span>
+                <span className="queue-main">
+                  <strong>{item.complaint}</strong>
+                  <span className="muted">
+                    Waiting {formatWait(item.waitingMinutes)}
+                    {item.painScore != null && ` · pain ${item.painScore}/10`}
+                    {item.assignedDoctor && ` · ${item.assignedDoctor.name} is handling this`}
                   </span>
-                </Link>
+                </span>
               </li>
             ))}
-          </ul>
-        </>
-      ) : (
-        <>
-          {queue && shown.length === 0 && <div className="card"><p>{queue.length === 0 ? 'No patients are waiting right now.' : 'No requests here.'}</p></div>}
-          <ul className="queue">
-            {shown.map((item) => {
-              const mine = item.assignedDoctor?.id === doctor?.id;
-              return (
-                <li key={item.visitId}>
-                  <Link to={`/doctor/visits/${item.visitId}`} className="queue-item">
-                    <span className={`ctas ctas-${item.suggestedCtas ?? 'none'}`} title={item.suggestedCtas ? CTAS_LABELS[item.suggestedCtas] : 'Not triaged'}>
-                      {item.suggestedCtas ? `CTAS ${item.suggestedCtas}` : 'CTAS ?'}
-                    </span>
-                    <span className="queue-main">
-                      <strong>{item.complaint}</strong>
-                      <span className="muted">
-                        Waiting {formatWait(item.waitingMinutes)}
-                        {item.assignedDoctor && ` · ${mine ? 'assigned to you' : item.assignedDoctor.name}`}
-                      </span>
-                    </span>
-                    {item.unreadForDoctor > 0 && <span className="badge">{item.unreadForDoctor} new</span>}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </>
+          </ol>
+        </section>
       )}
     </div>
   );

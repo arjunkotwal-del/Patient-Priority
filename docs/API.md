@@ -12,15 +12,24 @@ Authorization: Bearer <token from getAccessTokenSilently()>
 1. `npm install`
 2. In `.env.local` (never commit it), add `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.5-flash-lite` and `DATABASE_URL`.
 3. `npm run db:setup` creates the tables and the demo data. **We all share one database, so this resets the demo patients for everyone.** Only run it when that's okay.
-4. To use your own logins in the demo, put your Auth0 user ids (Auth0 dashboard > User Management > Users) in `.env.local`, then run `npm run db:setup` again:
+4. **Doctors** don't use Auth0 and can't sign up. They log in at `/doctor/login` with an email and
+   password that already exist in the `doctors` table. `npm run db:setup` (or, without resetting
+   anything, `npm run doctor:demo`) gives the demo doctor this login:
    ```
-   DEMO_DOCTOR_AUTH0_ID=...   # this login becomes Dr. Sam Rivera (demo)
+   DEMO_DOCTOR_EMAIL=doctor@example.com     # defaults; override in .env.local
+   DEMO_DOCTOR_PASSWORD=DemoDoctor123!
+   ```
+   Add a real doctor with `npm run doctor:add -- <email> "<Full name>" [license]` (prints a random
+   password, or set `DOCTOR_PASSWORD`); `npm run doctor:remove -- <email>` turns the login off.
+   Only these scripts create doctors. Doctors never have a health card: `/api/verification` and every
+   patient route answer `403` for a doctor login.
+5. **Patients** use Auth0. To use your own patient login in the demo, put your Auth0 user id in
+   `.env.local` and run `npm run db:setup` again:
+   ```
    DEMO_PATIENT_AUTH0_ID=...  # this login becomes a demo patient with history
    DEMO_PATIENT_ID=demo-maya  # or demo-daniel, demo-priya
    ```
-   Use two different accounts. To make any other signed-up account a doctor:
-   `npm run doctor:add -- <email> "<Full name>" [license]` (and `npm run doctor:remove -- <email>`).
-   Only these scripts can make someone a doctor; the app itself can't.
+6. `npm run dev`, and `npm test` to run the tests.
 5. `npm run dev`, and `npm test` to run the tests.
 
 ## Visit status
@@ -132,7 +141,9 @@ Every doctor route except `GET /api/doctor/me` returns `403 forbidden` for anyon
 
 | Route | Body | Returns |
 |---|---|---|
-| `GET /api/doctor/me` | | `{ doctor: { id, name } }` or `{ doctor: null }`. Open to every login: the app uses it to pick the doctor or patient side |
+| `POST /api/doctor/login` | `{ email, password }` | `{ token, expiresAt, doctor: { id, name }, email }`, or `401 bad_login`. No login needed; there is no sign-up route. Send the token as `Authorization: Bearer` |
+| `GET /api/doctor/me` | | `{ doctor: { id, name } }` or `{ doctor: null }`. Open to every login: the app uses it to check a saved doctor session |
+| `GET /api/doctor/history?q=&outcome=&mine=1` | | `{ cases: HistoryItem[], more }`: cases taken off the queue (advice sent or meeting scheduled), newest first, at most 100. `q` searches complaint, diagnosis, patient id, summary, plan and doctor; `outcome` is `all`, `advice` or `meeting`; `mine=1` limits to your cases |
 | `GET /api/doctor/queue` | | `{ queue: QueueItem[] }`: cases waiting for an answer, high priority first, then medium, then low, longest wait first within each |
 | `GET /api/doctor/appointments` | | `{ appointments: [...] }`: in-person appointments offered or booked, soonest first |
 | `POST /api/doctor/visits/:id/claim` | | `{ ok: true }`, or `409 claimed_by_other` |

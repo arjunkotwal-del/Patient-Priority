@@ -17,12 +17,12 @@ export function LoginPage() {
     <div className="auth-page login-page">
       <a className="skip-link" href="#main-content">Skip to content</a>
       <Link to="/" className="auth-back">← Back to Patient Priority</Link>
-      <aside className="auth-intro"><p className="eyebrow">PATIENT PRIORITY</p><h2>Your care.<br />One place to begin.</h2><p>Access patient resources or continue to your clinical workspace with your existing account.</p><div className="auth-help"><strong>First visit?</strong><p>Patients will need their Ontario health card for verification after creating an account.</p></div></aside>
+      <aside className="auth-intro"><p className="eyebrow">PATIENT PRIORITY</p><h2>Your care.<br />One place to begin.</h2><p>Log in to your patient account, or create one to get started.</p><div className="auth-help"><strong>First visit?</strong><p>Patients will need their Ontario health card for verification after creating an account.</p></div></aside>
       <main className="auth-card" id="main-content">
         <span className="brand-mark" aria-hidden="true">+</span>
         <p className="eyebrow">ACCOUNT ACCESS</p>
         <h1>Welcome back</h1>
-        <p className="muted">Log in to continue. Patients and clinicians use the same sign-in service.</p>
+        <p className="muted">Log in or create your patient account.</p>
         {error && <p className="error" role="alert">{error.message}</p>}
         <button className="btn btn-lg" onClick={() => go('login')} disabled={pending !== null}>
           {pending === 'login' ? 'Redirecting…' : 'Log in'}
@@ -30,7 +30,10 @@ export function LoginPage() {
         <button className="btn btn-lg btn-ghost" onClick={() => go('signup')} disabled={pending !== null}>
           {pending === 'signup' ? 'Redirecting…' : 'Create an account'}
         </button>
-        <p className="auth-footnote">You will continue to our sign-in provider to access your account.</p>
+        <p className="auth-footnote">
+          You will continue to our sign-in provider to access your account. Are you a doctor?{' '}
+          <Link to="/doctor/login">Doctor login</Link>
+        </p>
       </main>
     </div>
   );

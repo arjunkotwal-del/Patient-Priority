@@ -306,6 +306,11 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
   text-decoration: none;
 }
 .queue-item:hover { border-color: var(--accent); }
+.queue-item-static { opacity: 0.85; }
+.queue-item-static:hover { border-color: var(--border); }
+.doctor .case-title { font-size: 1.6rem; margin: 0.25rem 0; }
+.doctor details { margin-top: 1rem; }
+.doctor details summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .queue-main { display: flex; flex-direction: column; gap: 0.2rem; flex: 1; min-width: 0; }
 .badge { background: var(--accent); color: var(--accent-text); border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.8rem; white-space: nowrap; }
 
@@ -316,6 +321,26 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .ctas-3 { background: #ca8a04; }
 .ctas-4 { background: #15803d; }
 .ctas-5 { background: #1d4ed8; }
+.priority { flex-shrink: 0; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 600; font-size: 0.85rem; white-space: nowrap; border: 1px solid currentColor; }
+.priority-high { color: #b91c1c; background: #fef2f2; }
+.priority-medium { color: #a16207; background: #fefce8; }
+.priority-low { color: #475569; background: var(--surface); }
+:root[data-theme='dark'] .priority-high { color: #fca5a5; background: #450a0a; }
+:root[data-theme='dark'] .priority-medium { color: #fde047; background: #422006; }
+:root[data-theme='dark'] .priority-low { color: #cbd5e1; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .priority-high { color: #fca5a5; background: #450a0a; }
+  :root:not([data-theme='light']) .priority-medium { color: #fde047; background: #422006; }
+  :root:not([data-theme='light']) .priority-low { color: #cbd5e1; }
+}
+.case-badges { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.history-search { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end; }
+.history-search label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
+.history-search .history-query { flex: 1 1 260px; }
+.history-search input[type='search'], .history-search select { min-height: 42px; }
+.history-search .checkbox { flex-direction: row; align-items: center; min-height: 42px; }
+.queue-item-date { flex-shrink: 0; font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+.pill-advice { background: var(--green-soft); color: var(--accent); }
 
 .card.alert { border-color: var(--danger); }
 .card.alert h3 { color: var(--danger); }

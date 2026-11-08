@@ -11,6 +11,8 @@ import { encrypt, cardHash, checkKeys } from './server/secureStore.js';
 import { visitsRouter } from './server/visits.js';
 import { doctorRouter } from './server/doctor.js';
 import { eventsRouter, eventStreamHandler } from './server/events.js';
+import { doctorAuthRouter } from './server/doctorAuth.js';
+import { isDoctorUserId } from './server/doctorIds.js';
 
 try {
   process.loadEnvFile('.env.local');
@@ -63,7 +65,7 @@ function rateLimited(userId) {
 const api = express.Router();
 api.use(requireUser);
 
-api.get('/verification', async (req, res, next) => {
+api.get('/verification', rejectDoctors, async (req, res, next) => {
   try {
     const meta = await getAppMetadata(req.userId);
     res.json(publicStatus(meta.health_card));
@@ -72,7 +74,15 @@ api.get('/verification', async (req, res, next) => {
   }
 });
 
-api.post('/verification', upload.single('card'), async (req, res, next) => {
+// Doctors never have a health card on file. Only patients verify one.
+function rejectDoctors(req, res, next) {
+  if (isDoctorUserId(req.userId)) {
+    return res.status(403).json({ code: 'doctor_account', message: 'Doctor accounts do not use a health card.' });
+  }
+  next();
+}
+
+api.post('/verification', rejectDoctors, upload.single('card'), async (req, res, next) => {
   try {
     checkKeys();
     const firstName = String(req.body.firstName ?? '').trim().slice(0, 100);
@@ -134,6 +144,8 @@ api.use(eventsRouter);
 
 // The live stream checks its own one-time ticket, so it sits before the login check.
 app.get('/api/events', eventStreamHandler);
+// Doctor email + password login: it hands out the token, so it sits before the login check too.
+app.use('/api', doctorAuthRouter);
 app.use('/api', api);
 app.use('/api', (_req, res) => res.status(404).json({ code: 'not_found', message: 'Not found.' }));
 

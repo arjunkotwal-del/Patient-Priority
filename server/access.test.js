@@ -3,10 +3,10 @@ import { describe, it } from 'node:test';
 import { createAccess, parseVisitId } from './access.js';
 import { DatabaseUnavailableError } from './db.js';
 
-// Fake records: maya owns visit 1, daniel owns visit 2, doc-login is a doctor.
+// Fake records: maya owns visit 1, daniel owns visit 2, doctor|demo-dr-rivera is a doctor login.
 const fakes = {
   getOrCreatePatientId: async (userId) => ({ 'maya-login': 'demo-maya', 'daniel-login': 'demo-daniel' })[userId] ?? 'p_new',
-  getDoctorByAuth0Id: async (userId) => (userId === 'doc-login' ? { id: 'demo-dr-rivera', name: 'Dr. Rivera' } : null),
+  getDoctorForUser: async (userId) => (userId === 'doctor|demo-dr-rivera' ? { id: 'demo-dr-rivera', name: 'Dr. Rivera' } : null),
   getVisitPatientId: async (visitId) => ({ 1: 'demo-maya', 2: 'demo-daniel' })[visitId] ?? null,
 };
 const access = createAccess(fakes);
@@ -35,6 +35,9 @@ async function run(steps, req) {
 }
 
 describe('requirePatient', () => {
+  it('turns away doctor logins', async () => {
+    assert.equal(await run([access.requirePatient], { userId: 'doctor|demo-dr-rivera' }), 403);
+  });
   it('sets the patient id', async () => {
     const req = { userId: 'maya-login' };
     assert.equal(await run([access.requirePatient], req), 'next');
@@ -61,14 +64,14 @@ describe('requireOwnVisit', () => {
 
 describe('requireDoctor', () => {
   it('lets a doctor through', async () => {
-    const req = { userId: 'doc-login', params: { id: '2' } };
+    const req = { userId: 'doctor|demo-dr-rivera', params: { id: '2' } };
     assert.equal(await run([access.requireDoctor, access.requireVisit], req), 'next');
     assert.equal(req.doctor.id, 'demo-dr-rivera');
     assert.equal(req.visitId, 2);
   });
   it('blocks a patient with 403', async () => assert.equal(await run([access.requireDoctor], { userId: 'maya-login' }), 403));
   it('404s a missing visit for doctors too', async () =>
-    assert.equal(await run([access.requireDoctor, access.requireVisit], { userId: 'doc-login', params: { id: '99' } }), 404));
+    assert.equal(await run([access.requireDoctor, access.requireVisit], { userId: 'doctor|demo-dr-rivera', params: { id: '99' } }), 404));
 });
 
 describe('parseVisitId', () => {

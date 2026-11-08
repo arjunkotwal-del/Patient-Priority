@@ -6,6 +6,7 @@
 //   GET  /api/doctor/me                      { doctor: { id, name } } or { doctor: null }: which side of the app to show
 //   GET  /api/doctor/queue                   cases waiting for an answer: high, medium, low priority
 //   GET  /api/doctor/appointments            in-person appointments offered or booked
+//   GET  /api/doctor/history?q=&outcome=&mine= past cases taken off the queue, newest first
 //   POST /api/doctor/visits/:id/claim        take a case
 //   GET  /api/doctor/visits/:id              full case: chat, summary, history, notes
 //   POST /api/doctor/visits/:id/reply        the one reply: message, diagnosis, prescriptions, tests
@@ -137,13 +138,24 @@ const doctorCase = [requireDoctor, requireVisit];
 // Not behind requireDoctor: anyone may ask, and the answer tells the app which side to show.
 doctorRouter.get(
   '/doctor/me',
-  route(async (req, res) => res.json({ doctor: await db.getDoctorByAuth0Id(req.userId) })),
+  route(async (req, res) => res.json({ doctor: await db.getDoctorForUser(req.userId) })),
 );
 
 doctorRouter.get(
   '/doctor/queue',
   requireDoctor,
   route(async (_req, res) => res.json({ queue: await db.getQueue() })),
+);
+
+doctorRouter.get(
+  '/doctor/history',
+  requireDoctor,
+  route(async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 200) : '';
+    const outcome = ['advice', 'meeting'].includes(req.query.outcome) ? req.query.outcome : 'all';
+    const doctorId = req.query.mine === '1' ? req.doctor.id : null;
+    res.json(await db.searchHistory({ q, outcome, doctorId }));
+  }),
 );
 
 doctorRouter.get(

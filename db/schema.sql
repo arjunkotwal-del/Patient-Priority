@@ -14,6 +14,10 @@ CREATE TABLE IF NOT EXISTS doctors (
   license_number TEXT,
   auth0_user_id  TEXT UNIQUE
 );
+-- Doctors log in with email + password (not Auth0). Set only by npm run doctor:add / the demo scripts.
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS password_hash TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS doctors_email ON doctors (lower(email));
 
 -- One row per case, from check-in until the doctor resolves it.
 CREATE TABLE IF NOT EXISTS past_visits (
@@ -56,6 +60,8 @@ CREATE INDEX IF NOT EXISTS past_visits_patient_date ON past_visits (patient_id, 
 -- Queue priority for minor cases (high, medium, low) and why, from keyword rules plus the AI.
 ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS priority TEXT CHECK (priority IN ('high', 'medium', 'low'));
 ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS priority_reasons TEXT[] NOT NULL DEFAULT '{}';
+-- The 0 to 10 pain score the patient gave in the interview, if any. Breaks ties in the queue.
+ALTER TABLE past_visits ADD COLUMN IF NOT EXISTS pain_score SMALLINT CHECK (pain_score BETWEEN 0 AND 10);
 DROP INDEX IF EXISTS past_visits_queue;
 CREATE INDEX IF NOT EXISTS past_visits_queue_wait ON past_visits (status, started_at);
 CREATE INDEX IF NOT EXISTS past_visits_patient_started ON past_visits (patient_id, started_at DESC);

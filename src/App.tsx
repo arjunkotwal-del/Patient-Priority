@@ -9,7 +9,9 @@ import { MedicalPage } from './pages/MedicalPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AccountPage } from './pages/AccountPage';
 import { DoctorQueuePage } from './pages/DoctorQueuePage';
-import { DoctorVisitPage } from './pages/DoctorVisitPage';
+import { DoctorLoginPage } from './pages/DoctorLoginPage';
+import { DoctorHistoryPage } from './pages/DoctorHistoryPage';
+import { DoctorHistoryCasePage } from './pages/DoctorHistoryCasePage';
 
 export default function App() {
   return (
@@ -18,6 +20,7 @@ export default function App() {
       <Route element={<PublicOnlyRoute />}>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/doctor/login" element={<DoctorLoginPage />} />
       </Route>
 
       {/* Logged in: picks the doctor or patient side */}
@@ -37,14 +40,15 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Doctors only (checked against the doctors table on the server) */}
+      {/* Doctors only (checked on the server): the priority queue and the history of closed cases. */}
       <Route element={<DoctorRoute />}>
         <Route element={<DoctorLayout />}>
           <Route path="/doctor" element={<DoctorQueuePage />} />
-          <Route path="/doctor/visits/:id" element={<DoctorVisitPage />} />
-          <Route path="/doctor/settings" element={<SettingsPage />} />
+          <Route path="/doctor/history" element={<DoctorHistoryPage />} />
+          <Route path="/doctor/history/:id" element={<DoctorHistoryCasePage />} />
         </Route>
       </Route>
+      <Route path="/doctor/*" element={<Navigate to="/doctor" replace />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

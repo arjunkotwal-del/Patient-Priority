@@ -1,7 +1,7 @@
 // Turns a finished interview into the doctor's summary note, a suggested CTAS, and the
 // queue priority. Used by visits.js.
 // If the rules or the AI say escalate, we escalate. Rules always win.
-import { computePriority, PRIORITIES } from '../lib/priority.ts';
+import { computePriority, painScore, PRIORITIES } from '../lib/priority.ts';
 import { getComplaintFlags } from '../lib/redFlags.ts';
 import { buildSummaryPrompt } from '../lib/summaryPrompt.ts';
 import { askGemini, conversationText, scanInterview } from './interview.js';
@@ -51,7 +51,7 @@ function summaryText(input) {
   return [conversationText(input), ...premade].join('\n');
 }
 
-const escalated = (redFlags) => ({ escalate: true, redFlags, suggestedCtas: 3, priority: 'high', priorityReasons: [], soap: EMPTY_SOAP });
+const escalated = (redFlags) => ({ escalate: true, redFlags, suggestedCtas: 3, priority: 'high', priorityReasons: [], painScore: null, soap: EMPTY_SOAP });
 
 export async function runSummary(input) {
   const hits = scanInterview(input);
@@ -69,5 +69,13 @@ export async function runSummary(input) {
 
   // Keyword rules can only raise the AI's priority, never lower it.
   const { priority, reasons } = computePriority({ ...input, aiPriority: ai.aiPriority, aiReason: ai.priorityReason });
-  return { escalate: false, redFlags: ai.redFlags, suggestedCtas: ai.suggestedCtas, priority, priorityReasons: reasons, soap: ai.soap };
+  return {
+    escalate: false,
+    redFlags: ai.redFlags,
+    suggestedCtas: ai.suggestedCtas,
+    priority,
+    priorityReasons: reasons,
+    painScore: painScore(input.transcript ?? []),
+    soap: ai.soap,
+  };
 }

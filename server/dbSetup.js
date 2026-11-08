@@ -4,7 +4,8 @@ import pg from 'pg';
 import { readFileSync } from 'node:fs';
 import { DEMO_PATIENTS } from '../lib/history.ts';
 import { connectionOptions } from './db.js';
-import { DEMO_DOCTOR, DEMO_OPEN_CASES, DEMO_VISIT_DETAILS } from './demoData.js';
+import { DEMO_DOCTOR, DEMO_DOCTOR_LOGIN, DEMO_OPEN_CASES, DEMO_VISIT_DETAILS } from './demoData.js';
+import { hashPassword } from './doctorAuth.js';
 
 try {
   process.loadEnvFile('.env.local');
@@ -78,10 +79,10 @@ try {
   // Open cases are timed relative to now, so they always look freshly waiting.
   for (const c of DEMO_OPEN_CASES) {
     const { rows } = await client.query(
-      `INSERT INTO past_visits (patient_id, complaint, status, suggested_ctas, soap, priority, priority_reasons, started_at)
-       VALUES ($1, $2, 'waiting_for_doctor', $3, $4, $6, $7, now() - make_interval(mins => $5))
+      `INSERT INTO past_visits (patient_id, complaint, status, suggested_ctas, soap, priority, priority_reasons, pain_score, started_at)
+       VALUES ($1, $2, 'waiting_for_doctor', $3, $4, $6, $7, $8, now() - make_interval(mins => $5))
        RETURNING id, started_at`,
-      [c.patientId, c.complaint, c.suggestedCtas, c.soap, c.minutesAgo, c.priority, c.priorityReasons],
+      [c.patientId, c.complaint, c.suggestedCtas, c.soap, c.minutesAgo, c.priority, c.priorityReasons, c.painScore ?? null],
     );
     const { id, started_at: startedAt } = rows[0];
     for (const [minutes, sender, kind, text] of c.messages) {
@@ -91,18 +92,19 @@ try {
       );
     }
   }
-  // Optional: link real Auth0 logins to the demo doctor and a demo patient.
-  // Only this script adds doctors, so nobody can become one through the app.
-  // The env settings are the source of truth: blank means no demo login is linked.
+  // The demo doctor's email + password login (doctors don't use Auth0, and have no sign-up).
+  // Only the scripts add doctors, so nobody can become one through the app.
   const links = [];
-  await client.query('UPDATE doctors SET auth0_user_id = NULL WHERE id = $1', [DEMO_DOCTOR.id]);
+  const demoLogin = DEMO_DOCTOR_LOGIN();
+  await client.query('UPDATE doctors SET email = NULL WHERE lower(email) = $1 AND id <> $2', [demoLogin.email, DEMO_DOCTOR.id]);
+  await client.query('UPDATE doctors SET email = $2, password_hash = $3, auth0_user_id = NULL WHERE id = $1', [
+    DEMO_DOCTOR.id,
+    demoLogin.email,
+    await hashPassword(demoLogin.password),
+  ]);
+  links.push(`doctor login ${demoLogin.email} / ${demoLogin.password} -> ${DEMO_DOCTOR.name}`);
+  // Optional: link a real Auth0 login to a demo patient. Blank means none is linked.
   await client.query('UPDATE patients SET auth0_user_id = NULL WHERE id = ANY($1)', [Object.keys(DEMO_PATIENTS)]);
-  const doctorLogin = process.env.DEMO_DOCTOR_AUTH0_ID?.trim();
-  if (doctorLogin) {
-    await client.query('UPDATE doctors SET auth0_user_id = NULL WHERE auth0_user_id = $1 AND id <> $2', [doctorLogin, DEMO_DOCTOR.id]);
-    await client.query('UPDATE doctors SET auth0_user_id = $1 WHERE id = $2', [doctorLogin, DEMO_DOCTOR.id]);
-    links.push(`doctor login -> ${DEMO_DOCTOR.name}`);
-  }
   const patientLogin = process.env.DEMO_PATIENT_AUTH0_ID?.trim();
   const demoPatientId = process.env.DEMO_PATIENT_ID?.trim() || 'demo-maya';
   if (patientLogin) {

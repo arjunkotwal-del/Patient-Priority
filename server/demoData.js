@@ -2,6 +2,11 @@
 // Used only by npm run db:setup. DEMO CONTENT: not clinical advice.
 
 export const DEMO_DOCTOR = { id: 'demo-dr-rivera', name: 'Dr. Sam Rivera (demo)', licenseNumber: 'DEMO-0001' };
+/** The demo doctor's login. Read when called, after .env.local is loaded. */
+export const DEMO_DOCTOR_LOGIN = () => ({
+  email: (process.env.DEMO_DOCTOR_EMAIL?.trim() || 'doctor@example.com').toLowerCase(),
+  password: process.env.DEMO_DOCTOR_PASSWORD?.trim() || 'DemoDoctor123!',
+});
 
 // Cases waiting in the doctor queue right now, so the dashboard has something to show.
 // Each message is [minutes after check-in, sender, kind, text].

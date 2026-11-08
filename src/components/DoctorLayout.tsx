@@ -13,8 +13,8 @@ export function DoctorLayout() {
           <span className="clinic-tag">Clinician</span>
         </div>
         <nav aria-label="Clinical navigation">
-          <NavLink to="/doctor" end>Patient queue</NavLink>
-          <NavLink to="/doctor/settings">Settings</NavLink>
+          <NavLink to="/doctor" end>Priority queue</NavLink>
+          <NavLink to="/doctor/history">History</NavLink>
         </nav>
         <div className="clinic-user">
           <strong>{doctor?.name}</strong>

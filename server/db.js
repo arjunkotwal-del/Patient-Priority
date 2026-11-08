@@ -4,6 +4,7 @@ import pg from 'pg';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DEMO_PATIENTS } from '../lib/history.ts';
+import { doctorIdFromUserId } from './doctorIds.js';
 
 const VISITS_LOADED = 20;
 // TigerData signs its certificates with its own CA (ca.timescale.com), which Node
@@ -83,10 +84,25 @@ function requirePool() {
 
 // ---- Who is who: logged-in users mapped to patients and doctors ----
 
-/** The doctor linked to this Auth0 user, or null if they aren't a doctor. */
-export async function getDoctorByAuth0Id(auth0UserId) {
-  const { rows } = await requirePool().query('SELECT id, name FROM doctors WHERE auth0_user_id = $1', [auth0UserId]);
+/**
+ * The doctor for a logged-in user id, or null for patients. Only doctor logins
+ * ("doctor|<id>", see doctorAuth.js) can be doctors, so Auth0 users never touch the database here.
+ * A doctor whose login was removed (no password) is no longer a doctor.
+ */
+export async function getDoctorForUser(userId) {
+  const doctorId = doctorIdFromUserId(userId);
+  if (!doctorId) return null;
+  const { rows } = await requirePool().query('SELECT id, name FROM doctors WHERE id = $1 AND password_hash IS NOT NULL', [doctorId]);
   return rows[0] ?? null;
+}
+
+/** The doctor's login record for an email, or null. Includes the password hash: server use only. */
+export async function getDoctorLogin(email) {
+  const { rows } = await requirePool().query(
+    'SELECT id, name, password_hash FROM doctors WHERE lower(email) = lower($1) AND password_hash IS NOT NULL',
+    [email],
+  );
+  return rows[0] ? { id: rows[0].id, name: rows[0].name, passwordHash: rows[0].password_hash } : null;
 }
 
 /** The patient id for this Auth0 user. Creates an empty patient record on their first visit. */
@@ -183,10 +199,11 @@ export async function loadPatientHistory(patientId) {
 }
 
 /** Saves the AI summary and moves the case to the doctor queue, or marks it escalated. */
-export async function saveTriage(visitId, { escalate, redFlags, suggestedCtas, soap, priority = null, priorityReasons = [] }) {
+export async function saveTriage(visitId, { escalate, redFlags, suggestedCtas, soap, priority = null, priorityReasons = [], painScore = null }) {
   await requirePool().query(
-    `UPDATE past_visits SET status = $2, red_flags = $3, suggested_ctas = $4, soap = $5, priority = $6, priority_reasons = $7 WHERE id = $1`,
-    [visitId, escalate ? 'escalated' : 'waiting_for_doctor', redFlags, suggestedCtas, escalate ? null : soap, priority, priorityReasons],
+    `UPDATE past_visits SET status = $2, red_flags = $3, suggested_ctas = $4, soap = $5, priority = $6, priority_reasons = $7, pain_score = $8
+     WHERE id = $1`,
+    [visitId, escalate ? 'escalated' : 'waiting_for_doctor', redFlags, suggestedCtas, escalate ? null : soap, priority, priorityReasons, painScore],
   );
 }
 
@@ -330,6 +347,64 @@ export async function listAppointments() {
   }));
 }
 
+// Cases a doctor has taken off the queue: advice sent (resolved) or a meeting scheduled.
+const HISTORY_STATUSES = { all: ['resolved', 'appointment_offered', 'appointment_booked'], advice: ['resolved'], meeting: ['appointment_offered', 'appointment_booked'] };
+const HISTORY_LIMIT = 100;
+
+/** Escapes % and _ so a search for "50%" means the text, not a wildcard. */
+const likePattern = (q) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+/**
+ * Past cases for the doctor History page, newest first.
+ *   q        searches complaint, diagnosis, patient id, summary, plan and doctor name
+ *   outcome  'all' | 'advice' | 'meeting'
+ *   doctorId only cases this doctor closed, if set
+ */
+export async function searchHistory({ q = '', outcome = 'all', doctorId = null } = {}) {
+  const statuses = HISTORY_STATUSES[outcome] ?? HISTORY_STATUSES.all;
+  const params = [statuses];
+  const where = ['v.status = ANY($1)'];
+  if (q) {
+    params.push(likePattern(q));
+    const n = `$${params.length}`;
+    where.push(`(v.complaint ILIKE ${n} OR v.diagnosis ILIKE ${n} OR v.patient_id ILIKE ${n} OR v.summary ILIKE ${n}
+             OR v.plan ILIKE ${n} OR COALESCE(d.name, ad.name, '') ILIKE ${n})`);
+  }
+  if (doctorId) {
+    params.push(doctorId);
+    where.push(`COALESCE(v.doctor_id, a.doctor_id) = $${params.length}`);
+  }
+  params.push(HISTORY_LIMIT + 1);
+  const { rows } = await requirePool().query(
+    `SELECT v.id, v.patient_id, v.complaint, v.status, v.diagnosis, v.priority, v.suggested_ctas, v.confirmed_ctas,
+            v.started_at, COALESCE(v.resolved_at, a.created_at, v.started_at) AS closed_at,
+            COALESCE(d.name, ad.name) AS doctor_name
+     FROM past_visits v
+     LEFT JOIN appointments a ON a.visit_id = v.id
+     LEFT JOIN doctors d ON d.id = v.doctor_id
+     LEFT JOIN doctors ad ON ad.id = a.doctor_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY closed_at DESC, v.id DESC
+     LIMIT $${params.length}`,
+    params,
+  );
+  return {
+    cases: rows.slice(0, HISTORY_LIMIT).map((r) => ({
+      visitId: Number(r.id),
+      patientId: r.patient_id,
+      complaint: r.complaint,
+      status: r.status,
+      diagnosis: r.diagnosis,
+      priority: r.priority,
+      ctas: r.confirmed_ctas ?? r.suggested_ctas,
+      startedAt: iso(r.started_at),
+      closedAt: iso(r.closed_at),
+      doctorName: r.doctor_name,
+    })),
+    more: rows.length > HISTORY_LIMIT,
+  };
+}
+
 /**
  * A doctor takes a case. Returns true if they now have it, false if another doctor
  * already does or the case is closed. Claiming your own case again is fine.
@@ -345,13 +420,16 @@ export async function claimVisit(visitId, doctorId) {
 }
 
 /**
- * Cases waiting for the doctor's answer: high priority first, then medium, then low, and
- * the longest wait first within each. Priority comes from keyword rules plus the AI's
- * rating (see lib/priority.ts), and the reasons go to the doctor.
+ * Cases waiting for the doctor's answer, worst first:
+ *   1. priority: high, medium, low (keyword rules plus the AI's rating, see lib/priority.ts)
+ *   2. CTAS: lower is more urgent (unrated last)
+ *   3. pain score: higher first (none given last)
+ *   4. wait: longest first
+ * The reasons go to the doctor so they can see why a case is at the front.
  */
 export async function getQueue() {
   const { rows } = await requirePool().query(
-    `SELECT v.id, v.patient_id, v.complaint, v.status, v.suggested_ctas, v.priority, v.priority_reasons, v.started_at,
+    `SELECT v.id, v.patient_id, v.complaint, v.status, v.suggested_ctas, v.priority, v.priority_reasons, v.pain_score, v.started_at,
             floor(extract(epoch FROM now() - v.started_at) / 60)::int AS waiting_minutes,
             v.assigned_doctor_id, d.name AS assigned_doctor_name,
             (SELECT count(*)::int FROM visit_messages m
@@ -359,7 +437,10 @@ export async function getQueue() {
                AND (v.doctor_read_at IS NULL OR m.sent_at > v.doctor_read_at)) AS unread_for_doctor
      FROM past_visits v LEFT JOIN doctors d ON d.id = v.assigned_doctor_id
      WHERE v.status = 'waiting_for_doctor'
-     ORDER BY CASE v.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 2 END, v.started_at ASC, v.id ASC`,
+     ORDER BY CASE v.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 2 END,
+              v.suggested_ctas ASC NULLS LAST,
+              v.pain_score DESC NULLS LAST,
+              v.started_at ASC, v.id ASC`,
   );
   return rows.map((r) => ({
     visitId: Number(r.id),
@@ -369,6 +450,7 @@ export async function getQueue() {
     suggestedCtas: r.suggested_ctas,
     priority: r.priority ?? 'medium',
     priorityReasons: r.priority_reasons,
+    painScore: r.pain_score,
     startedAt: iso(r.started_at),
     waitingMinutes: r.waiting_minutes,
     assignedDoctor: r.assigned_doctor_id ? { id: r.assigned_doctor_id, name: r.assigned_doctor_name } : null,
