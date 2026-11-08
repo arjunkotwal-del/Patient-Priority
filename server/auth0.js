@@ -79,6 +79,20 @@ export async function findUserIdsByEmail(email) {
   return users.map((u) => u.user_id);
 }
 
+/** Creates an email + password login in the database connection and returns its user_id. */
+export async function createPasswordUser(email, password) {
+  const user = await mgmtFetch('/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      password,
+      connection: process.env.AUTH0_DB_CONNECTION || 'Username-Password-Authentication',
+      email_verified: true,
+    }),
+  });
+  return user.user_id;
+}
+
 export async function setHealthCard(userId, healthCard) {
   await mgmtFetch(`/users/${encodeURIComponent(userId)}`, {
     method: 'PATCH',

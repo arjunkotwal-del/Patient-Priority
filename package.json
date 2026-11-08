@@ -11,7 +11,8 @@
     "test": "node --test --test-timeout=10000 server/*.test.js lib/*.test.js",
     "db:setup": "node server/dbSetup.js",
     "doctor:add": "node server/addDoctor.js",
-    "doctor:remove": "node server/addDoctor.js --remove"
+    "doctor:remove": "node server/addDoctor.js --remove",
+    "doctor:demo": "node server/demoDoctor.js"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.30.0",
