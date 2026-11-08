@@ -25,7 +25,8 @@ function PatientShell() {
       items={[
         { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', end: true },
         { to: '/visits', label: 'Start a visit', icon: 'plus', end: true },
-        { to: '/history', label: 'My visits', icon: 'chat', count: unreadTotal },
+        { to: '/history', label: 'My visits', icon: 'chat' },
+        { to: '/notifications', label: 'Notifications', icon: 'bell', count: unreadTotal },
         { to: '/account', label: 'My account', icon: 'account' },
         { to: '/settings', label: 'Settings', icon: 'settings' },
       ]}

@@ -8,6 +8,7 @@ import { VerifyPage } from './pages/VerifyPage';
 import { VisitsPage } from './pages/VisitsPage';
 import { VisitPage } from './pages/VisitPage';
 import { PatientDashboardPage } from './pages/PatientDashboardPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AccountPage } from './pages/AccountPage';
 import { DoctorQueuePage } from './pages/DoctorQueuePage';
@@ -39,7 +40,7 @@ export default function App() {
           <Route path="/visits/:id" element={<VisitPage />} />
           <Route path="/history" element={<PatientDashboardPage history />} />
           <Route path="/care-plan" element={<Navigate to="/history" replace />} />
-          <Route path="/notifications" element={<Navigate to="/history" replace />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/account" element={<AccountPage />} />
           {/* Old link from the previous UI. */}
