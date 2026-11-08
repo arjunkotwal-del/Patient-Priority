@@ -7,9 +7,7 @@ import { LoginPage } from './pages/LoginPage';
 import { VerifyPage } from './pages/VerifyPage';
 import { VisitsPage } from './pages/VisitsPage';
 import { VisitPage } from './pages/VisitPage';
-import { HistoryPage } from './pages/HistoryPage';
-import { CarePlanPage } from './pages/CarePlanPage';
-import { NotificationsPage } from './pages/NotificationsPage';
+import { PatientDashboardPage } from './pages/PatientDashboardPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AccountPage } from './pages/AccountPage';
 import { DoctorQueuePage } from './pages/DoctorQueuePage';
@@ -35,16 +33,17 @@ export default function App() {
       {/* Patients: logged in and verified */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
+          <Route path="/dashboard" element={<PatientDashboardPage />} />
           <Route path="/visits" element={<VisitsPage />} />
           <Route path="/visits/new" element={<Navigate to="/visits" replace />} />
           <Route path="/visits/:id" element={<VisitPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/care-plan" element={<CarePlanPage />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/history" element={<PatientDashboardPage history />} />
+          <Route path="/care-plan" element={<Navigate to="/history" replace />} />
+          <Route path="/notifications" element={<Navigate to="/history" replace />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/account" element={<AccountPage />} />
           {/* Old link from the previous UI. */}
-          <Route path="/medical" element={<Navigate to="/visits" replace />} />
+          <Route path="/medical" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Route>
 

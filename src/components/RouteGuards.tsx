@@ -29,7 +29,7 @@ export function VerifyRoute() {
   if (isLoading || (user && (verificationLoading || doctorLoading))) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
   if (doctor) return <Navigate to="/doctor" replace />;
-  if (verification?.verified) return <Navigate to="/visits" replace />;
+  if (verification?.verified) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
 
@@ -49,7 +49,7 @@ export function DoctorRoute() {
       </div>
     );
   }
-  if (!doctor) return <Navigate to="/visits" replace />;
+  if (!doctor) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }
 
@@ -58,7 +58,7 @@ export function HomeRedirect() {
   const { user, isLoading, doctor, doctorLoading } = useAuth();
   if (isLoading || (user && doctorLoading)) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={doctor ? '/doctor' : '/visits'} replace />;
+  return <Navigate to={doctor ? '/doctor' : '/dashboard'} replace />;
 }
 
 /** Only reachable when logged OUT (landing + login); logged-in users go to the app. */

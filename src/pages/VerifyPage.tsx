@@ -203,7 +203,7 @@ export function VerifyPage() {
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.message ?? `Server error (${res.status})`);
       setVerification(body as Verification);
-      navigate('/visits', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed.');
     } finally {
@@ -214,24 +214,18 @@ export function VerifyPage() {
   const ready = firstName.trim() && lastName.trim() && photo && consent && !submitting;
 
   return (
-    <div className="public">
-      <header className="public-header">
-        <span className="side-brand">
-          <span className="logo" aria-hidden="true">+</span>
-          <span><strong>PatientPriority</strong><span>Identity check</span></span>
-        </span>
-        <div className="row">
-          <span className="mono faint">{user?.email}</span>
+    <div className="landing">
+      <header className="topbar">
+        <span className="brand">Patient Priority</span>
+        <div className="topbar-user">
+          <span>{user?.email}</span>
           <button className="btn btn-ghost" onClick={logout}>Log out</button>
         </div>
       </header>
 
-      <main className="page page-narrow">
-        <form className="card verify" onSubmit={onSubmit}>
-          <div>
-            <span className="eyebrow">One-time step</span>
-            <h1>Verify your health card</h1>
-          </div>
+      <main className="content">
+        <form className="panel verify" onSubmit={onSubmit}>
+          <h1>Verify your health card</h1>
           <p className="muted">
             One last step. We check that your Ontario health card matches your name before you can use Patient
             Priority.
@@ -295,7 +289,7 @@ export function VerifyPage() {
                   <button type="button" className="btn" onClick={() => void startCamera()}>
                     {photo ? 'Retake with camera' : 'Use camera'}
                   </button>
-                  <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
+                  <button type="button" className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
                     Upload photo
                   </button>
                 </>

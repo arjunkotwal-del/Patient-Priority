@@ -1,42 +1,22 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { Icon, initials } from './Icon';
+import { WorkspaceShell } from './WorkspaceShell';
 
-/** The clinician workstation. Doctors never see the patient portal. */
+/** The clinician workspace. Doctors never see the patient portal. */
 export function DoctorLayout() {
   const { doctor, user, logout } = useAuth();
   return (
-    <div className="shell">
-      <a className="skip-link" href="#main-content">Skip to content</a>
-      <aside className="side">
-        <NavLink to="/doctor" className="side-brand">
-          <span className="logo" aria-hidden="true">+</span>
-          <span><strong>PatientPriority</strong><span>Doctor workstation</span></span>
-        </NavLink>
-        <nav className="side-nav" aria-label="Clinical navigation">
-          <NavLink to="/doctor" end><Icon name="format_list_bulleted" size={18} />Patient queue</NavLink>
-          <NavLink to="/doctor/settings"><Icon name="settings" size={18} />Settings</NavLink>
-        </nav>
-        <div className="side-foot">
-          <div className="side-user">
-            <span className="avatar" aria-hidden="true">{initials(doctor?.name ?? user?.name)}</span>
-            <div>
-              <strong>{doctor?.name}</strong>
-              <span>{user?.email}</span>
-            </div>
-            <button className="btn btn-ghost" onClick={logout} aria-label="Log out" title="Log out"><Icon name="logout" size={18} /></button>
-          </div>
-        </div>
-      </aside>
-      <div className="main">
-        <header className="topbar">
-          <span className="topbar-title">Fast track queue</span>
-          <span className="on-duty"><span className="dot" aria-hidden="true" />{doctor?.name ?? 'Clinician'} on duty</span>
-        </header>
-        <main id="main-content">
-          <Outlet />
-        </main>
-      </div>
-    </div>
+    <WorkspaceShell
+      role="doctor"
+      name={doctor?.name ?? user?.name ?? 'Clinician'}
+      email={user?.email}
+      logout={logout}
+      items={[
+        { to: '/doctor', label: 'Patient queue', icon: 'dashboard', end: true },
+        { to: '/doctor/settings', label: 'Settings', icon: 'settings' },
+      ]}
+    >
+      <Outlet />
+    </WorkspaceShell>
   );
 }

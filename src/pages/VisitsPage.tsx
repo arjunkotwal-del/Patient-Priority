@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Bubble, Composer, Stamp, Suggestions, Typing } from '../components/Chat';
 import { Icon } from '../components/Icon';
-import { askNotificationPermission, notifyIfHidden, subscribeToUpdates } from '../lib/live';
+import { usePatientVisits } from '../components/PatientVisitsContext';
+import { askNotificationPermission } from '../lib/live';
 import { PREMADE_QUESTIONS } from '../../lib/premadeQuestions.ts';
-import { PATIENT_STATUS, callApi, formatClock, formatDate, type MyVisits, type StepResponse, type VisitSummary } from './patientApi';
+import { callApi, formatClock, type StepResponse } from './patientApi';
 
 const GREETING = "Hi! What's bothering you today? A doctor will review your answers and reply here.";
 const QUICK_STARTS = ['Sore throat', 'Ear pain', 'Sprained ankle', 'Rash'];
@@ -14,37 +15,6 @@ const SKIP = 'Skip';
 /** The name to greet the patient by: their first name, or the start of their email. */
 export function displayName(name?: string | null) {
   return name?.split(/[\s@]/)[0] ?? '';
-}
-
-/** Loads the patient's visits and keeps them fresh. Shared by the portal pages. */
-export function useMyVisits() {
-  const { getToken } = useAuth();
-  const [data, setData] = useState<MyVisits | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setData(await callApi<MyVisits>(getToken, '/me/visits'));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load your visits.');
-    }
-  }, [getToken]);
-
-  useEffect(() => {
-    void load();
-    return subscribeToUpdates({
-      as: 'patient',
-      getToken,
-      onConnect: () => void load(),
-      onEvent: (e) => {
-        void load();
-        if (e.reason === 'doctor_reply' || e.reason === 'appointment_offered') notifyIfHidden('Your doctor replied', 'Tap to read it.', `/visits/${e.visitId}`);
-      },
-    });
-  }, [load, getToken]);
-
-  return { data, error };
 }
 
 /** Lets the patient turn on browser notifications from the doctor card. */
@@ -66,7 +36,7 @@ export function NotifyButton() {
 export function VisitsPage() {
   const { user, getToken } = useAuth();
   const navigate = useNavigate();
-  const { error } = useMyVisits();
+  const { error } = usePatientVisits();
   const [complaint, setComplaint] = useState<string | null>(null);
   const [answers, setAnswers] = useState<{ question: string; answer: string; at: string }[]>([]);
   const [complaintAt, setComplaintAt] = useState('');
@@ -186,23 +156,4 @@ export function VisitsPage() {
 function timeOfDay() {
   const hour = new Date().getHours();
   return hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening';
-}
-
-export function VisitList({ visits }: { visits: VisitSummary[] }) {
-  return (
-    <ul className="visit-list">
-      {visits.map((v) => (
-        <li key={v.id}>
-          <Link to={`/visits/${v.id}`} className="visit-row">
-            <span className="grow">
-              <strong>{v.complaint}</strong>
-              <span className="mono">{formatDate(v.startedAt)}{v.doctorName && ` · ${v.doctorName}`}</span>
-            </span>
-            {v.unreadCount > 0 && <span className="badge">{v.unreadCount}</span>}
-            <span className={`status status-${v.status}`}>{PATIENT_STATUS[v.status]}</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
-  );
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Bubble, ComposerCard, Composer, DoctorCard, Stamp, Suggestions, Typing } from '../components/Chat';
-import { notifyIfHidden, subscribeToUpdates } from '../lib/live';
+import { subscribeToUpdates } from '../lib/live';
 import { PATIENT_STATUS, callApi, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
 import { NotifyButton } from './VisitsPage';
 
@@ -51,8 +51,8 @@ export function VisitPage() {
       getToken,
       onConnect: () => void load(),
       onEvent: (e) => {
+        // The portal shows the browser notification; this page just reloads its own visit.
         if (String(e.visitId) === id) void load();
-        if (e.reason === 'doctor_reply' || e.reason === 'appointment_offered') notifyIfHidden('Your doctor replied', 'Tap to read it.', `/visits/${e.visitId}`);
       },
     });
   }, [load, getToken, id]);

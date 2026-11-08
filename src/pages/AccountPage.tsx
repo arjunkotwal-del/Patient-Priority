@@ -13,13 +13,9 @@ export function AccountPage() {
   };
 
   return (
-    <div className="page page-narrow">
-      <div>
-        <span className="eyebrow">Your details</span>
-        <h1>Account</h1>
-      </div>
-
-      <form className="card action-form" onSubmit={onSubmit}>
+    <div className="panel">
+      <h1>Account</h1>
+      <form onSubmit={onSubmit}>
         <label>
           Display name
           <input
@@ -34,32 +30,27 @@ export function AccountPage() {
           Email
           <input value={user?.email ?? ''} disabled />
         </label>
-        <div className="row">
-          <button className="btn" type="submit">Save</button>
-          {saved && <span className="muted">Saved.</span>}
-        </div>
+        <button className="btn" type="submit">Save</button>
+        {saved && <span className="muted"> Saved.</span>}
       </form>
-
-      <section className="card stack-sm">
-        <h2>Health card</h2>
-        {verification?.verified ? (
-          <>
-            <p>
-              Ontario health card <span className="mono">•••• {verification.last4}</span>
-              {verification.versionCode ? ` (version ${verification.versionCode})` : ''}
-            </p>
-            <p className="muted small">
-              {verification.legalName.first} {verification.legalName.last} · verified {new Date(verification.verifiedAt).toLocaleDateString()}
-            </p>
-          </>
-        ) : (
-          <p className="muted">Not verified.</p>
-        )}
-      </section>
-
-      <div>
-        <button className="btn btn-danger" onClick={logout}>Log out</button>
-      </div>
+      <hr />
+      <h2>Health card</h2>
+      {verification?.verified ? (
+        <div className="health-card-status">
+          <span>
+            Ontario health card •••• {verification.last4}
+            {verification.versionCode ? ` (version ${verification.versionCode})` : ""}
+          </span>
+          <span className="muted">
+            {verification.legalName.first} {verification.legalName.last} · verified{" "}
+            {new Date(verification.verifiedAt).toLocaleDateString()}
+          </span>
+        </div>
+      ) : (
+        <p className="muted">Not verified.</p>
+      )}
+      <hr />
+      <button className="btn btn-danger" onClick={logout}>Log out</button>
     </div>
   );
 }

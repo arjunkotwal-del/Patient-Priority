@@ -2,83 +2,45 @@
 
 export function LandingPage() {
   return (
-    <div className="public">
-      <a className="skip-link" href="#main-content">Skip to content</a>
-      <header className="public-header">
-        <Link to="/" className="side-brand">
-          <span className="logo" aria-hidden="true">+</span>
-          <span><strong>PatientPriority</strong><span>Virtual fast track</span></span>
-        </Link>
-        <div className="row">
-          <Link to="/login" state={{ from: { pathname: '/doctor' } }} className="btn btn-ghost">Clinician login</Link>
-          <Link to="/login" className="btn btn-secondary">Log in</Link>
-        </div>
+    <div className="landing">
+      <div className="utility-bar"><div className="site-width">Patient information & clinical care <span>Patient Priority</span></div></div>
+      <header className="topbar public-header">
+        <a className="skip-link" href="#main-content">Skip to content</a>
+        <Link to="/" className="brand"><span className="brand-mark" aria-hidden="true">+</span>Patient Priority</Link>
+        <nav aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#care-access">Access your care</a></nav>
+        <Link to="/login" className="btn btn-ghost">Log in <span aria-hidden="true">↗</span></Link>
       </header>
-
-      <main id="main-content" className="wrap">
-        <section className="hero" aria-labelledby="hero-title">
-          <div>
-            <span className="eyebrow">Ontario emergency department · CTAS 4 and 5</span>
-            <h1 id="hero-title">Minor problem?<br /><em>Skip the waiting room.</em></h1>
-            <p className="hero-lead">
-              Sore throat, sprain, rash or ear pain? Tell us what's going on from your phone. A doctor reviews your answers and
-              replies once with a plan, or a time to be seen in person.
-            </p>
-            <div className="hero-actions">
-              <Link to="/login" className="btn btn-lg">Start a visit →</Link>
-              <a href="#how" className="btn btn-lg btn-secondary">How it works</a>
-            </div>
+      <main id="main-content">
+        <section className="hero site-width" aria-labelledby="hero-title">
+          <div className="hero-copy" data-enter>
+            <p className="eyebrow">PATIENTS & CARE TEAMS</p>
+            <h1 id="hero-title">Patient care,<br />in one place.</h1>
+            <p className="hero-description">Your health information and your care team, in one place. Get started as a patient or sign in to your clinical workspace.</p>
+            <Link to="/login" className="btn btn-lg">Access your account <span aria-hidden="true">→</span></Link>
+            <p className="hero-note"><span className="status-dot" aria-hidden="true" /> Account access for patients and clinicians</p>
           </div>
-
-          <div className="preview" aria-label="Example consultation">
-            <span className="chat-stamp">Private consultation · example</span>
-            <div className="msg">
-              <span className="msg-icon" aria-hidden="true">+</span>
-              <div className="msg-main">
-                <div className="msg-head"><strong>Intake assistant</strong><span className="msg-tag">AI</span></div>
-                <div className="msg-body">Is the pain getting better, worse, or staying the same?</div>
-              </div>
-            </div>
-            <div className="msg msg-patient">
-              <span className="msg-icon" aria-hidden="true">You</span>
-              <div className="msg-main">
-                <div className="msg-body">A bit worse since yesterday.</div>
-              </div>
-            </div>
-            <div className="msg msg-doctor">
-              <span className="msg-icon" aria-hidden="true">Dr</span>
-              <div className="msg-main">
-                <div className="msg-head"><strong>Your doctor</strong><span className="msg-tag">Doctor</span></div>
-                <div className="msg-body">Here's your plan, with a prescription you can pick up today.</div>
-              </div>
-            </div>
+          <div className="care-guide" aria-label="Your patient journey">
+            <div className="guide-header"><span className="eyebrow">YOUR PATIENT JOURNEY</span><span className="guide-symbol" aria-hidden="true">+</span></div>
+            <h2>Start with the essentials.</h2>
+            <ol className="journey-list">
+              <li><span className="step-number">1</span><div><h3>Access your account</h3><p>Log in or create an account to begin.</p></div></li>
+              <li><span className="step-number">2</span><div><h3>Verify your health card</h3><p>Have your Ontario health card ready.</p></div></li>
+              <li><span className="step-number">3</span><div><h3>Start a visit</h3><p>Describe what is bothering you and a doctor replies here.</p></div></li>
+            </ol>
+            <div className="guide-footer">Already registered? <Link to="/login">Log in to continue <span aria-hidden="true">→</span></Link></div>
           </div>
         </section>
-
-        <section id="how" className="steps" aria-label="How it works">
-          <div className="step">
-            <span className="mono">01 · Describe it</span>
-            <h3>Tell us what's wrong</h3>
-            <p>In your own words, then tap through a few quick questions.</p>
-          </div>
-          <div className="step">
-            <span className="mono">02 · Follow-up</span>
-            <h3>The AI asks the right questions</h3>
-            <p>About 4 to 8 follow-ups, so the doctor gets the full picture.</p>
-          </div>
-          <div className="step">
-            <span className="mono">03 · One reply</span>
-            <h3>A doctor answers once</h3>
-            <p>A plan with any prescriptions and tests, or in-person times to pick from.</p>
+        <div className="emergency-notice site-width" role="note"><span className="notice-icon" aria-hidden="true">!</span><p><strong>Need emergency care?</strong> This website is not an emergency service. For a medical emergency, call 911 or go to your nearest emergency department.</p></div>
+        <section className="access-section site-width" id="care-access" aria-labelledby="access-title">
+          <div className="section-heading"><p className="eyebrow">THE RIGHT PLACE TO START</p><h2 id="access-title">Access for every part of care.</h2></div>
+          <div className="access-grid">
+            <Link className="access-card patient-access" to="/login"><span className="access-label">FOR PATIENTS</span><h3>Your patient account <span aria-hidden="true">↗</span></h3><p>Verify your health card, start a visit, and follow your care plans.</p><span className="access-action">Access patient services <span aria-hidden="true">→</span></span></Link>
+            <Link className="access-card clinician-access" to="/login" state={{ from: { pathname: '/doctor' } }}><span className="access-label">FOR CLINICIANS</span><h3>Your clinical workspace <span aria-hidden="true">↗</span></h3><p>Review the patient queue, follow up on requests, and manage in-person appointments.</p><span className="access-action">Log in as a clinician <span aria-hidden="true">→</span></span></Link>
           </div>
         </section>
-
+        <section className="how-section" id="how-it-works" aria-labelledby="how-title"><div className="site-width how-layout"><div><p className="eyebrow">BEFORE YOU BEGIN</p><h2 id="how-title">Account access & preparation.</h2><p className="muted">Simple steps so you know what to expect.</p></div><div className="info-list"><div><h3>One account to get started</h3><p>New here? Choose “Create an account” on the login page. Returning users can log in with their existing account.</p></div><div><h3>Health card verification for patients</h3><p>Patients verify their Ontario health card before starting a visit. Clinician access is assigned to approved accounts.</p></div><div><h3>Text size and appearance</h3><p>Adjust text size and appearance in Settings once you are signed in.</p></div></div></div></section>
       </main>
-
-      <footer className="footer">
-        <span>PatientPriority</span>
-        <span>Demo build · fake patient data only</span>
-      </footer>
+      <footer className="footer site-width"><Link to="/" className="brand">Patient Priority</Link><span>Patient information. Care team access.</span><span>© {new Date().getFullYear()} Patient Priority</span></footer>
     </div>
   );
 }

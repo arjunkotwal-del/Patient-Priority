@@ -25,6 +25,9 @@ export interface MyVisits {
 export type VisitSummary = MyVisits['visits'][number];
 
 /** Visits that are still going. Everything else is history. */
+/** Still going: everything except a finished or escalated visit. */
+export const isActiveVisit = (status: CaseStatus) => status !== 'resolved' && status !== 'escalated';
+
 export const OPEN_STATUSES: CaseStatus[] = ['interviewing', 'waiting_for_doctor', 'appointment_offered', 'appointment_booked'];
 
 /** What the patient sees for each status. Never anything about priority or triage level. */
