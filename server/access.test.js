@@ -44,6 +44,10 @@ describe('requirePatient', () => {
     const broken = createAccess({ ...fakes, getOrCreatePatientId: async () => Promise.reject(new DatabaseUnavailableError()) });
     assert.equal(await run([broken.requirePatient], { userId: 'x' }), 503);
   });
+  it('answers 503 for invalid database configuration without forwarding internal details', async () => {
+    const broken = createAccess({ ...fakes, getOrCreatePatientId: async () => { throw new DatabaseUnavailableError('Invalid DATABASE_URL'); } });
+    assert.equal(await run([broken.requirePatient], { userId: 'x' }), 503);
+  });
 });
 
 describe('requireOwnVisit', () => {

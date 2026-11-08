@@ -1,7 +1,32 @@
 import assert from 'node:assert/strict';
-import { before, describe, it } from 'node:test';
+import { before, describe, it, afterEach } from 'node:test';
 import { DEMO_PATIENTS } from '../lib/history.ts';
-import { loadPatientHistory, toPatientView } from './db.js';
+import { connectionOptions, DatabaseUnavailableError, loadPatientHistory, toPatientView } from './db.js';
+
+describe('database URL configuration', () => {
+  const original = process.env.DATABASE_URL;
+  afterEach(() => { if (original === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = original; });
+  it('rejects a malformed URL without exposing credentials', () => {
+    process.env.DATABASE_URL = 'postgresql://user:SECRET_PASSWORD@host:invalid-port/database';
+    assert.throws(() => connectionOptions(), (error) => {
+      assert.ok(error instanceof DatabaseUnavailableError);
+      assert.ok(error.message.includes('Invalid DATABASE_URL'));
+      assert.ok(!JSON.stringify(error).includes('SECRET_PASSWORD'));
+      assert.ok(!('input' in error));
+      return true;
+    });
+  });
+  it('rejects an HTTP address instead of treating it as Postgres', () => {
+    process.env.DATABASE_URL = 'https://example.invalid/database';
+    assert.throws(() => connectionOptions(), DatabaseUnavailableError);
+  });
+  it('keeps certificate verification enabled for valid Postgres URLs', () => {
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test?sslmode=require';
+    const options = connectionOptions();
+    assert.equal(options.ssl.rejectUnauthorized, true);
+    assert.ok(!options.connectionString.includes('sslmode='));
+  });
+});
 
 describe('loadPatientHistory without a database', () => {
   before(() => {

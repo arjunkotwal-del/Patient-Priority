@@ -46,8 +46,8 @@ export function Stamp({ children }: { children: ReactNode }) {
 }
 
 /** One chat message. */
-export function Bubble({ from, text, time, patientName, doctorName, pending }: {
-  from: Who; text: string; time?: string; patientName?: string | null; doctorName?: string | null; pending?: boolean;
+export function Bubble({ from, text, time, patientName, doctorName, pending, saved = true }: {
+  from: Who; text: string; time?: string; patientName?: string | null; doctorName?: string | null; pending?: boolean; saved?: boolean;
 }) {
   if (from === 'patient') {
     return (
@@ -59,7 +59,7 @@ export function Bubble({ from, text, time, patientName, doctorName, pending }: {
             <span className="sc-name">{patientName || 'You'}</span>
           </div>
           <div className="sc-bubble sc-bubble-me">{text}</div>
-          {!pending && <span className="sc-delivered"><Icon name="done_all" size={14} />Delivered to care team</span>}
+          {!pending && <span className="sc-delivered"><Icon name={saved ? 'done_all' : 'schedule'} size={14} />{saved ? 'Saved to your visit' : 'Not saved yet'}</span>}
         </div>
       </li>
     );

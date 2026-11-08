@@ -11,12 +11,17 @@ import { encrypt, cardHash, checkKeys } from './server/secureStore.js';
 import { visitsRouter } from './server/visits.js';
 import { doctorRouter } from './server/doctor.js';
 import { eventsRouter, eventStreamHandler } from './server/events.js';
+import { connectionOptions } from './server/db.js';
 
 try {
   process.loadEnvFile('.env.local');
 } catch {
   /* no .env.local: rely on real environment variables (e.g. in production) */
 }
+
+// Validate configuration before requests arrive, without connecting or printing credentials.
+try { connectionOptions(); }
+catch (err) { console.error(`Database configuration: ${err.message}`); }
 
 const DEV = process.argv.includes('--dev');
 const PORT = Number(process.env.PORT) || (DEV ? 3001 : 3000);

@@ -114,12 +114,12 @@ export function VisitsPage() {
           <Stamp>Private consultation · Today {formatClock(openedAt)}</Stamp>
           <ul className="sc-thread">
             <Bubble from="ai" text={GREETING} time={openedAt} />
-            <Bubble from="patient" text={complaint} time={complaintAt} patientName={user?.name} />
+            <Bubble from="patient" text={complaint} time={complaintAt} patientName={user?.name} saved={false} />
             {answers.map((a, i) => (
               <li key={i} className="thread-pair">
                 <ul>
                   <Bubble from="ai" text={a.question} />
-                  <Bubble from="patient" text={a.answer} time={a.at} patientName={user?.name} />
+                  <Bubble from="patient" text={a.answer} time={a.at} patientName={user?.name} saved={false} />
                 </ul>
               </li>
             ))}

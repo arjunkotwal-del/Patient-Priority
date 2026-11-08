@@ -13,7 +13,15 @@ let pool = null;
 
 /** Connection settings with TLS verified against TigerData's CA. */
 export function connectionOptions() {
-  const url = new URL(process.env.DATABASE_URL);
+  if (!process.env.DATABASE_URL) throw new DatabaseUnavailableError();
+  let url;
+  try {
+    url = new URL(process.env.DATABASE_URL);
+    if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname) throw new Error('Invalid database address');
+  } catch {
+    // Never retain the parser error: its input can contain the database password.
+    throw new DatabaseUnavailableError('Invalid DATABASE_URL. Set a PostgreSQL connection URL in .env.local and restart the API.');
+  }
   // sslmode in the URL would replace the ssl settings below, so it is removed.
   url.searchParams.delete('sslmode');
   return { connectionString: url.toString(), ssl: { ca: readFileSync(TIGER_CA, 'utf8'), rejectUnauthorized: true } };
@@ -67,10 +75,10 @@ export async function getPatientHistory({ patientId, auth0UserId }) {
 
 // ---- Visits: one per case, with its full chat, doctor, diagnosis and prescriptions ----
 
-/** Thrown when DATABASE_URL isn't set, so routes can answer 503 instead of a generic error. */
+/** Configuration failures return 503; messages contain no connection string or credentials. */
 export class DatabaseUnavailableError extends Error {
-  constructor() {
-    super('Missing env var DATABASE_URL');
+  constructor(message = 'Missing env var DATABASE_URL') {
+    super(message);
     this.name = 'DatabaseUnavailableError';
   }
 }
