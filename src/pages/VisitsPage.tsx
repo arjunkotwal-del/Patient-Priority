@@ -62,11 +62,7 @@ export function VisitsPage() {
           <span className="msg-icon" aria-hidden="true">+</span>
           <div className="msg-main">
             <div className="msg-head"><strong>Intake assistant</strong><span className="msg-tag">AI</span></div>
-            <div className="msg-body">
-              Hi{firstName ? ` ${firstName}` : ''}. For a minor problem like a sore throat, a sprain, a rash or ear pain, tell me
-              what's going on and I'll ask a few questions. A doctor then reviews your answers and replies here with a plan, or a
-              time to be seen in person.
-            </div>
+            <div className="msg-body">Hi! What's bothering you today? A doctor will review your answers and reply here.</div>
           </div>
         </div>
         <div className="suggest">

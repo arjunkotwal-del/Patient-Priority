@@ -79,6 +79,7 @@ export function VisitPage() {
           {visit.status === 'appointment_offered' && <AppointmentPicker visit={visit} path={path} onBooked={setVisit} reload={load} />}
           {visit.status === 'appointment_booked' && <Booked visit={visit} />}
           {visit.status === 'resolved' && <Plan visit={visit} />}
+          <ClosedChat replied={visit.status !== 'waiting_for_doctor'} />
         </>
       )}
 
@@ -228,6 +229,21 @@ function Interview({ visit, path, onStep, reload }: { visit: PatientVisitView; p
 }
 
 // ---- After the interview ---------------------------------------------------
+
+/**
+ * Where the message box was. Once the interview ends the patient can't send anything more on this
+ * visit (the server refuses it too), so a new problem means a new visit.
+ */
+function ClosedChat({ replied }: { replied: boolean }) {
+  return (
+    <div className="composer composer-closed" role="status">
+      <span className="muted">
+        {replied ? 'The doctor has replied, so this chat is closed.' : 'Your answers are with the doctor. This chat is closed while they review.'}
+      </span>
+      <Link to="/visits/new" className="btn btn-secondary">Start a new visit</Link>
+    </div>
+  );
+}
 
 function Waiting({ visit }: { visit: PatientVisitView }) {
   return (
