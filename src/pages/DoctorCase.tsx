@@ -176,7 +176,7 @@ export function DoctorCase({ item, onDone }: { item: QueueItem; onDone: () => Pr
               Schedule a meeting
             </button>
           </div>
-          {action === 'advice' ? <AdviceForm act={act} suggestedCtas={visit.suggestedCtas} /> : <MeetingForm act={act} />}
+          {action === 'advice' ? <AdviceForm act={act} /> : <MeetingForm act={act} />}
         </section>
       </div>
     </article>
@@ -205,20 +205,17 @@ const EMPTY_ORDER = { type: 'lab', name: '', instructions: '' };
 const isBlank = (row: Record<string, string>, skip: string[] = []) =>
   Object.entries(row).every(([k, v]) => skip.includes(k) || !v.trim());
 
-/** Advice: the doctor's one reply (message, diagnosis, CTAS, any prescriptions and tests). Closes the case. */
-export function AdviceForm({ act, suggestedCtas }: { act: Act; suggestedCtas: number | null }) {
-  const defaultCtas = suggestedCtas === 4 || suggestedCtas === 5 ? suggestedCtas : 4;
-  const empty = { message: '', diagnosis: '', confirmedCtas: defaultCtas, ctasOverrideReason: '' };
+/** Advice: the doctor's one reply (message, diagnosis, any prescriptions and tests). Closes the case. */
+export function AdviceForm({ act }: { act: Act }) {
+  const empty = { message: '', diagnosis: '' };
   const [v, setV] = useState(empty);
   const [rxs, setRxs] = useState<(typeof EMPTY_RX)[]>([]);
   const [orders, setOrders] = useState<(typeof EMPTY_ORDER)[]>([]);
-  const changed = suggestedCtas != null && v.confirmedCtas !== suggestedCtas;
 
   const form = useSubmit(
     () =>
       act('reply', {
         ...v,
-        ctasOverrideReason: changed ? v.ctasOverrideReason : undefined,
         prescriptions: rxs.filter((r) => !isBlank(r)),
         orders: orders.filter((o) => !isBlank(o, ['type'])),
       }),
@@ -240,26 +237,10 @@ export function AdviceForm({ act, suggestedCtas }: { act: Act; suggestedCtas: nu
         Advice for the patient
         <textarea value={v.message} rows={5} maxLength={5000} required onChange={(e) => setV({ ...v, message: e.target.value })} />
       </label>
-      <div className="form-row">
-        <label>
-          Diagnosis
-          <input value={v.diagnosis} maxLength={500} required onChange={(e) => setV({ ...v, diagnosis: e.target.value })} />
-        </label>
-        <label>
-          Confirm CTAS {suggestedCtas != null && <span className="muted small">(AI suggested {suggestedCtas})</span>}
-          <select value={v.confirmedCtas} onChange={(e) => setV({ ...v, confirmedCtas: Number(e.target.value) })}>
-            <option value={4}>4 · {CTAS_LABELS[4]}</option>
-            <option value={5}>5 · {CTAS_LABELS[5]}</option>
-          </select>
-        </label>
-      </div>
-      <p className="muted small">More urgent than CTAS 4? Schedule a meeting, or escalate from the full case.</p>
-      {changed && (
-        <label>
-          Why are you changing the CTAS level?
-          <input value={v.ctasOverrideReason} maxLength={1000} required onChange={(e) => setV({ ...v, ctasOverrideReason: e.target.value })} />
-        </label>
-      )}
+      <label>
+        Diagnosis
+        <input value={v.diagnosis} maxLength={500} required onChange={(e) => setV({ ...v, diagnosis: e.target.value })} />
+      </label>
 
       <fieldset className="items">
         <legend>Prescriptions</legend>

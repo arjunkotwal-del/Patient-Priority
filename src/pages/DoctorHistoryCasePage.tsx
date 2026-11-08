@@ -130,7 +130,7 @@ export function DoctorHistoryCasePage() {
           {status === 'appointment_booked' && (
             <section className="card actions">
               <h2>Close after the meeting</h2>
-              <AdviceForm act={act} suggestedCtas={visit.suggestedCtas} />
+              <AdviceForm act={act} />
             </section>
           )}
 

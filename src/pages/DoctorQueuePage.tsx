@@ -5,7 +5,7 @@ import { DoctorCase } from './DoctorCase';
 import { CTAS_LABELS, PRIORITY_LABELS, callApi, formatWait, type QueueItem } from './doctorApi';
 
 // Live updates refresh the queue right away; this is only a safety net if the stream drops.
-const REFRESH_MS = 60_000;
+const REFRESH_MS = 15_000;
 
 /**
  * The priority queue, worst first (red flags, then priority, CTAS, pain and wait;
