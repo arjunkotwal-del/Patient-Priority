@@ -66,19 +66,20 @@ function parseList(value, parseItem, label) {
 }
 
 /**
- * The doctor's one reply. Confirming or changing the AI's suggested CTAS: a change needs
- * a reason, and CTAS 1 to 3 is not minor, so it must go through escalate instead.
+ * The doctor's one reply. CTAS is optional: the reply form doesn't ask for it. If a CTAS is sent,
+ * it must be 4 or 5 (1 to 3 is not minor, so escalate instead), and changing the AI's
+ * suggestion needs a reason.
  */
 export function parseDoctorReply(body, suggestedCtas) {
   const message = text(body?.message, 5000);
   const diagnosis = text(body?.diagnosis, 500);
   const summary = optionalText(body?.summary);
   const reason = optionalText(body?.ctasOverrideReason, 1000);
-  const ctas = body?.confirmedCtas;
+  const ctas = body?.confirmedCtas ?? null;
   if (!message) return { error: 'Write the message for the patient.' };
   if (!diagnosis || summary === null || reason === null) return { error: 'A diagnosis is required.' };
-  if (ctas !== 4 && ctas !== 5) return { error: 'Confirm CTAS 4 or 5. For anything more urgent, escalate the case instead.' };
-  if (suggestedCtas && ctas !== suggestedCtas && !reason) return { error: 'Give a reason for changing the suggested CTAS.' };
+  if (ctas !== null && ctas !== 4 && ctas !== 5) return { error: 'CTAS must be 4 or 5. For anything more urgent, escalate the case instead.' };
+  if (ctas !== null && suggestedCtas && ctas !== suggestedCtas && !reason) return { error: 'Give a reason for changing the suggested CTAS.' };
   const prescriptions = parseList(body?.prescriptions, parsePrescription, 'prescriptions');
   if (prescriptions.error) return prescriptions;
   const orders = parseList(body?.orders, parseOrder, 'orders');

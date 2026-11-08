@@ -30,6 +30,11 @@ describe('parseDoctorReply', () => {
   it('accepts a change with a reason', () =>
     assert.equal(parseDoctorReply({ ...body, confirmedCtas: 4, ctasOverrideReason: 'Worse than reported' }, 5).ctasOverrideReason, 'Worse than reported'));
   it('sends CTAS 3 to escalate instead', () => assert.ok(parseDoctorReply({ ...body, confirmedCtas: 3, ctasOverrideReason: 'x' }, 5).error));
+  it('accepts a reply with no CTAS', () => {
+    const reply = parseDoctorReply({ message: 'Rest and fluids.', diagnosis: 'Viral sore throat' }, 5);
+    assert.equal(reply.error, undefined);
+    assert.equal(reply.confirmedCtas, null);
+  });
   it('rejects a bad prescription inside the reply', () => assert.ok(parseDoctorReply({ ...body, prescriptions: [{ medication: 'x' }] }, 5).error));
   it('rejects prescriptions that are not a list', () => assert.ok(parseDoctorReply({ ...body, prescriptions: rx }, 5).error));
 });
