@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { Bubble, Composer, Stamp, Suggestions, Typing } from '../components/Chat';
+import { Bubble, Composer, Stamp, Suggestions, Typing, scrollToLatest } from '../components/Chat';
 import { Icon } from '../components/Icon';
 import { usePatientVisits } from '../components/PatientVisitsContext';
 import { askNotificationPermission } from '../lib/live';
@@ -43,14 +43,13 @@ export function VisitsPage() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [openedAt] = useState(() => new Date().toISOString());
-  const endRef = useRef<HTMLDivElement>(null);
 
   const name = displayName(user?.name);
   const question = complaint !== null ? PREMADE_QUESTIONS[answers.length] : undefined;
   const done = complaint !== null && !question;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (complaint !== null) scrollToLatest();
   }, [complaint, answers.length, starting]);
 
   // After the last set question, create the visit; the AI's first follow-up is waiting on its page.
@@ -137,7 +136,6 @@ export function VisitsPage() {
               <button className="sc-doctor-btn" style={{ alignSelf: 'flex-start' }} onClick={() => void start()}>Try again</button>
             </div>
           )}
-          <div ref={endRef} />
         </div>
       </div>
       <div className="sc-column sc-bottom">

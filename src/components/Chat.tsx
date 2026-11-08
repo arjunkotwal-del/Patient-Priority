@@ -3,6 +3,17 @@ import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from 're
 import { Icon, initials } from './Icon';
 import { formatClock } from '../pages/patientApi';
 
+/**
+ * Scrolls the page to the very bottom so the newest message sits just above the message box.
+ * (Scrolling a marker after the last message into view would stop short of the pinned message box
+ * and the footer, so the page jumped up after every message.) Call it from an effect, after the
+ * new message has rendered.
+ */
+export function scrollToLatest() {
+  const page = document.scrollingElement ?? document.documentElement;
+  window.scrollTo({ top: page.scrollHeight, behavior: 'smooth' });
+}
+
 export type Who = 'ai' | 'patient' | 'doctor';
 
 /** The welcome / visit header card: avatar, title, a chip, a sub line, and the attending box on the right. */

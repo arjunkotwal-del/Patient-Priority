@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { Bubble, ComposerCard, Composer, DoctorCard, Stamp, Suggestions, Typing } from '../components/Chat';
+import { Bubble, ComposerCard, Composer, DoctorCard, Stamp, Suggestions, Typing, scrollToLatest } from '../components/Chat';
 import { subscribeToUpdates } from '../lib/live';
 import { callApi, patientStatus, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
 import { NotifyButton } from './VisitsPage';
@@ -30,7 +30,6 @@ export function VisitPage() {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
   const path = `/visits/${encodeURIComponent(id)}`;
 
   const load = useCallback(async () => {
@@ -59,9 +58,8 @@ export function VisitPage() {
   }, [load, getToken, id]);
 
   useEffect(() => {
-    // Braces matter: newer browsers return a Promise from scrollIntoView, and React would treat it as a cleanup.
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [visit?.messages.length, visit?.status, sending]);
+    if (visit) scrollToLatest();
+  }, [visit?.messages.length, visit?.status, sending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error && !visit) {
     return (
@@ -147,7 +145,6 @@ export function VisitPage() {
           {visit.status === 'appointment_offered' && <AppointmentPicker visit={visit} path={path} onBooked={setVisit} reload={load} />}
           {visit.status === 'appointment_booked' && <Booked visit={visit} />}
           {visit.status === 'resolved' && <Plan visit={visit} />}
-          <div ref={endRef} />
         </div>
       </div>
 
