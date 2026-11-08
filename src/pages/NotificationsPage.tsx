@@ -3,7 +3,7 @@ import { VisitList, useMyVisits } from './VisitsPage';
 /** Doctor notifications: visits with something new from a doctor, or waiting on the patient. */
 export function NotificationsPage() {
   const { data, error } = useMyVisits();
-  const updates = data?.visits.filter((v) => v.unreadCount > 0 || v.status === 'appointment_offered') ?? [];
+  const updates = data?.visits.filter((v) => v.unreadCount > 0 || v.status === 'appointment_offered' || v.status === 'escalated') ?? [];
 
   return (
     <div className="sc-page">

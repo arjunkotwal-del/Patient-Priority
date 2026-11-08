@@ -34,7 +34,7 @@ export const PATIENT_STATUS: Record<CaseStatus, string> = {
   appointment_offered: 'Pick a time',
   appointment_booked: 'Booked',
   resolved: 'Plan ready',
-  escalated: 'See the front desk',
+  escalated: 'Check notifications',
 };
 
 /** Times come from the server in UTC; show them in the patient's own time zone. */

@@ -265,7 +265,7 @@ legend { font-family: var(--serif); font-size: 1.15rem; padding: 0; margin-botto
 .status { flex-shrink: 0; padding: 0.2rem 0.65rem; border-radius: 999px; border: 1px solid var(--border-2); font: 500 0.72rem var(--mono); text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-2); background: var(--card); white-space: nowrap; }
 .status-appointment_offered, .status-resolved { background: var(--primary-soft); border-color: var(--primary-line); color: #e88768; }
 .status-appointment_booked, .status-waiting_for_doctor { background: var(--slate-soft); border-color: var(--slate-line); color: var(--slate-text); }
-.status-escalated { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger); }
+.status-escalated { background: var(--primary-soft); border-color: var(--primary-line); color: #e88768; }
 
 .intake-q { display: flex; flex-direction: column; gap: 0.6rem; padding: 1rem 0; border-top: 1px solid var(--border); }
 .intake-q:first-of-type { border-top: 0; padding-top: 0.25rem; }

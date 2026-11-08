@@ -15,7 +15,7 @@ const DOCTOR_LINE: Record<string, string> = {
   appointment_offered: 'Would like to see you in person · Pick a time below',
   appointment_booked: 'Your in-person appointment is booked',
   resolved: 'Replied · Your care plan is below',
-  escalated: 'Would like to see you in person · Check in at the front desk',
+  escalated: 'Has an update for you · Check your doctor notifications',
 };
 
 /**
