@@ -109,7 +109,7 @@ The patient view. It never contains the SOAP note, red flags, CTAS levels or doc
 When the doctor offers an appointment, `status` is `appointment_offered` and `appointment` is filled in:
 ```json
 "appointment": {
-  "location": "ER fast track, room 2", "status": "offered", "bookedAt": null, "doctorName": "Dr. Sam Rivera (demo)",
+  "location": "ER fast track, room 2", "description": "Bring your inhaler.", "status": "offered", "bookedAt": null, "doctorName": "Dr. Sam Rivera (demo)",
   "slots": [{ "id": 41, "startsAt": "2026-11-08T15:00:00.000Z", "chosen": false },
             { "id": 42, "startsAt": "2026-11-09T14:00:00.000Z", "chosen": false }]
 }
@@ -165,6 +165,7 @@ Every doctor route except `GET /api/doctor/me` returns `403 forbidden` for anyon
 | `POST /api/doctor/visits/:id/appointment` | see below | `201`. Status becomes `appointment_offered` |
 | `POST /api/doctor/visits/:id/notes` | `{ text }` | `201`. Private: never shown to the patient or the AI |
 | `POST /api/doctor/visits/:id/escalate` | `{ reason }` | `{ ok: true }` |
+| `POST /api/doctor/visits/:id/delete` | | `{ ok: true }`. Deletes a history case (`resolved`, `appointment_offered` or `appointment_booked`) with its chat, prescriptions, tests and appointment, for the patient too. Logged as `deleted`. Other statuses get `409 wrong_status` |
 
 **The reply** (one message, like an email, with everything in it):
 ```json
@@ -185,6 +186,7 @@ Every doctor route except `GET /api/doctor/me` returns `403 forbidden` for anyon
 {
   "message": "I would like to look in your ear in person. Pick a time that works.",
   "location": "ER fast track, room 2",
+  "description": "Optional, up to 2000 characters. Shown to the patient: what the meeting is for, what to bring.",
   "slots": ["2026-11-08T10:00:00-05:00", "2026-11-09T09:00:00-05:00"]
 }
 ```

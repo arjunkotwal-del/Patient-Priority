@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { AdviceForm, type Act } from './DoctorCase';
-import { CTAS_LABELS, OUTCOME_LABELS, PRIORITY_LABELS, callApi, formatTime as time, type DoctorVisitDetail, type HistoryItem } from './doctorApi';
+import { CTAS_LABELS, OUTCOME_LABELS, PRIORITY_LABELS, callApi, deleteHistoryCase, formatTime as time, type DoctorVisitDetail, type HistoryItem } from './doctorApi';
 
 const SENDER_LABELS = { patient: 'Patient', ai: 'Intake assistant', doctor: 'Doctor' } as const;
 const ORDER_LABELS = { lab: 'Lab test', imaging: 'Imaging', referral: 'Referral', other: 'Other' } as const;
@@ -15,9 +15,24 @@ export function DoctorHistoryCasePage() {
   const { getToken } = useAuth();
   const [detail, setDetail] = useState<DoctorVisitDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const navigate = useNavigate();
   const path = `/doctor/visits/${encodeURIComponent(id)}`;
   // Back to the list with the same search, if we came from one.
-  const back = <Link to={`/doctor/history${new URLSearchParams(search).get('from') ?? ''}`} className="back">← History</Link>;
+  const listUrl = `/doctor/history${new URLSearchParams(search).get('from') ?? ''}`;
+  const back = <Link to={listUrl} className="back">← History</Link>;
+
+  const remove = async () => {
+    if (!detail) return;
+    setDeleting(true);
+    try {
+      if (await deleteHistoryCase(getToken, detail.visit.id)) navigate(listUrl, { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this case.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -73,8 +88,12 @@ export function DoctorHistoryCasePage() {
           {visit.priority && <span className={`chip chip-${visit.priority}`}>{PRIORITY_LABELS[visit.priority]}</span>}
           <span className="chip plain">{ctas ? `CTAS ${ctas} · ${CTAS_LABELS[ctas]}` : 'Not triaged'}</span>
           <Link to={`/doctor/visits/${visit.id}`} className="btn btn-secondary">Full case: notes →</Link>
+          <button type="button" className="btn btn-danger" disabled={deleting} onClick={() => void remove()}>
+            {deleting ? 'Deleting…' : 'Delete case'}
+          </button>
         </div>
       </div>
+      {error && <p className="error">{error}</p>}
 
       <div className="doctor-grid">
         <div className="doctor-main">
@@ -99,6 +118,7 @@ export function DoctorHistoryCasePage() {
                 {visit.appointment.location} · {visit.appointment.doctorName} ·{' '}
                 {visit.appointment.status === 'booked' ? 'booked' : 'waiting for the patient to pick a time'}
               </p>
+              {visit.appointment.description && <p className="muted pre-wrap">{visit.appointment.description}</p>}
               <ul className="slots">
                 {visit.appointment.slots.map((s) => (
                   <li key={s.id} className={s.chosen ? 'chosen' : ''}>{time(s.startsAt)}{s.chosen && ' ✓ chosen'}</li>

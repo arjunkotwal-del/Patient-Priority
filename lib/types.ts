@@ -51,6 +51,8 @@ export type CaseStatus = 'interviewing' | 'waiting_for_doctor' | 'appointment_of
 /** In-person appointment: the doctor offers 1 to 4 times, the patient picks one. */
 export interface Appointment {
   location: string;
+  /** Optional details from the doctor, shown to the patient. Empty if none. */
+  description: string;
   status: 'offered' | 'booked';
   bookedAt: string | null;
   doctorName: string;

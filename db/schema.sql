@@ -90,6 +90,8 @@ CREATE TABLE IF NOT EXISTS appointments (
   booked_at  TIMESTAMPTZ
 );
 CREATE UNIQUE INDEX IF NOT EXISTS appointments_one_per_visit ON appointments (visit_id);
+-- Optional details for the patient: what the meeting is for, what to bring.
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS appointment_slots (
   id             BIGSERIAL PRIMARY KEY,

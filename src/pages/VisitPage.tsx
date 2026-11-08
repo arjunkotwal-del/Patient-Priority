@@ -212,6 +212,7 @@ function AppointmentPicker({ visit, path, onBooked, reload }: { visit: PatientVi
     <section className="card stack">
       <div className="card-head"><h2>The doctor would like to see you in person</h2><span className="chip chip-high">Action needed</span></div>
       <p><span className="eyebrow">Where</span><br />{appt.location}</p>
+      {appt.description && <p className="pre-wrap"><span className="eyebrow">About this appointment</span><br />{appt.description}</p>}
       <div className="stack-sm" role="radiogroup" aria-label="Pick a time">
         <span className="eyebrow">Pick a time</span>
         {upcoming.length === 0 && <p className="muted">All of these times have passed.</p>}
@@ -239,6 +240,7 @@ function Booked({ visit }: { visit: PatientVisitView }) {
       <span className="eyebrow">You're booked</span>
       {slot && <p className="big-time">{formatSlot(slot.startsAt)}</p>}
       {appt && <p>{appt.location} · {appt.doctorName}</p>}
+      {appt?.description && <p className="pre-wrap">{appt.description}</p>}
       <p className="small muted">Check in at the fast track desk when you arrive. Your plan will appear here after the visit.</p>
     </section>
   );

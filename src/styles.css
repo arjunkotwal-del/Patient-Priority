@@ -337,6 +337,12 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .history-search label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
 .history-search .history-query { flex: 1 1 260px; }
 .history-search input[type='search'], .history-search select { min-height: 42px; }
+.history-card { display: flex; gap: 0.5rem; align-items: stretch; }
+.history-card .qcard { flex: 1; min-width: 0; }
+.history-delete { flex-shrink: 0; padding: 0 0.85rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: #b83232; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.history-delete:hover:not(:disabled) { background: #b83232; border-color: #b83232; color: #ffffff; }
+.history-delete:disabled { opacity: 0.6; cursor: default; }
+.pre-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .history-search .checkbox { flex-direction: row; align-items: center; min-height: 42px; }
 .queue-item-date { flex-shrink: 0; font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
 .pill-advice { background: var(--accent-soft); color: var(--accent); }

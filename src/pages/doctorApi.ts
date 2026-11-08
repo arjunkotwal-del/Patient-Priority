@@ -35,6 +35,16 @@ export interface HistoryItem {
   doctorName: string | null;
 }
 
+/** Asks the doctor to confirm, then deletes a past case for good. Returns false if they cancelled. */
+export async function deleteHistoryCase(getToken: () => Promise<string>, visitId: number): Promise<boolean> {
+  const sure = window.confirm(
+    `Delete case #${visitId}? Its chat, advice, prescriptions, tests and any meeting are removed for you and the patient. This can't be undone.`,
+  );
+  if (!sure) return false;
+  await callApi(getToken, `/doctor/visits/${visitId}/delete`, {});
+  return true;
+}
+
 /** How each closed case ended, for the History page. */
 export const OUTCOME_LABELS: Record<HistoryItem['status'], string> = {
   resolved: 'Advice sent',

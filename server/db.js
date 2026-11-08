@@ -313,18 +313,17 @@ export async function sendDoctorReply(visitId, doctorId, reply) {
  * The doctor needs to see the patient in person: offers a few times at one location.
  * Only for a waiting case. Returns false otherwise.
  */
-export async function offerAppointment(visitId, doctorId, { message, location, slots }) {
+export async function offerAppointment(visitId, doctorId, { message, location, description = '', slots }) {
   return inTransaction(async (c) => {
     const { rowCount } = await c.query(
       `UPDATE past_visits SET status = 'appointment_offered' WHERE id = $1 AND status = 'waiting_for_doctor'`,
       [visitId],
     );
     if (rowCount !== 1) return false;
-    const { rows } = await c.query('INSERT INTO appointments (visit_id, doctor_id, location) VALUES ($1, $2, $3) RETURNING id', [
-      visitId,
-      doctorId,
-      location,
-    ]);
+    const { rows } = await c.query(
+      'INSERT INTO appointments (visit_id, doctor_id, location, description) VALUES ($1, $2, $3, $4) RETURNING id',
+      [visitId, doctorId, location, description],
+    );
     for (const startsAt of slots) {
       await c.query('INSERT INTO appointment_slots (appointment_id, starts_at) VALUES ($1, $2)', [rows[0].id, startsAt]);
     }
@@ -355,7 +354,7 @@ export async function bookAppointmentSlot(visitId, slotId) {
 
 async function getAppointment(db, visitId) {
   const { rows } = await db.query(
-    `SELECT a.id, a.location, a.status, a.booked_at, d.name AS doctor_name FROM appointments a
+    `SELECT a.id, a.location, a.description, a.status, a.booked_at, d.name AS doctor_name FROM appointments a
      JOIN doctors d ON d.id = a.doctor_id WHERE a.visit_id = $1`,
     [visitId],
   );
@@ -364,6 +363,7 @@ async function getAppointment(db, visitId) {
   const slots = await db.query('SELECT id, starts_at, chosen FROM appointment_slots WHERE appointment_id = $1 ORDER BY starts_at', [a.id]);
   return {
     location: a.location,
+    description: a.description ?? '',
     status: a.status,
     bookedAt: iso(a.booked_at),
     doctorName: a.doctor_name,
@@ -450,6 +450,28 @@ export async function searchHistory({ q = '', outcome = 'all', doctorId = null }
     })),
     more: rows.length > HISTORY_LIMIT,
   };
+}
+
+/**
+ * Deletes a case from the history (advice sent or meeting scheduled), with its chat,
+ * prescriptions, tests and appointment. Logs the deletion first, since the log row
+ * outlives the visit. Returns the patient id, or null if the case isn't in the history.
+ */
+export async function deleteHistoryVisit(visitId, doctorId) {
+  return inTransaction(async (c) => {
+    const { rows } = await c.query('SELECT patient_id FROM past_visits WHERE id = $1 AND status = ANY($2) FOR UPDATE', [
+      visitId,
+      HISTORY_STATUSES.all,
+    ]);
+    if (rows.length === 0) return null;
+    await c.query(`INSERT INTO access_log (doctor_id, patient_id, visit_id, action) VALUES ($1, $2, $3, 'deleted')`, [
+      doctorId,
+      rows[0].patient_id,
+      visitId,
+    ]);
+    await c.query('DELETE FROM past_visits WHERE id = $1', [visitId]);
+    return rows[0].patient_id;
+  });
 }
 
 /**

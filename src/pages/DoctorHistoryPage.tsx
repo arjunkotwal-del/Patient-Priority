@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { CTAS_LABELS, OUTCOME_LABELS, callApi, formatTime, type HistoryItem } from './doctorApi';
+import { CTAS_LABELS, OUTCOME_LABELS, callApi, deleteHistoryCase, formatTime, type HistoryItem } from './doctorApi';
 
 type Outcome = 'all' | 'advice' | 'meeting';
 const SEARCH_DELAY_MS = 300;
@@ -20,6 +20,21 @@ export function DoctorHistoryPage() {
   const [text, setText] = useState(q);
   const [result, setResult] = useState<{ cases: HistoryItem[]; more: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+
+  const remove = async (visitId: number) => {
+    setDeleting(visitId);
+    try {
+      if (await deleteHistoryCase(getToken, visitId)) {
+        setResult((r) => r && { ...r, cases: r.cases.filter((c) => c.visitId !== visitId) });
+        setError(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this case.');
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const update = (changes: Record<string, string>) => {
     const next = new URLSearchParams(params);
@@ -91,7 +106,8 @@ export function DoctorHistoryPage() {
       {result && result.cases.length > 0 && (
         <div className="queue-list">
           {result.cases.map((c) => (
-            <Link key={c.visitId} to={`/doctor/history/${c.visitId}${params.size ? `?from=${encodeURIComponent(`?${params}`)}` : ''}`} className="qcard">
+            <div key={c.visitId} className="history-card">
+            <Link to={`/doctor/history/${c.visitId}${params.size ? `?from=${encodeURIComponent(`?${params}`)}` : ''}`} className="qcard">
               <div className="qcard-head">
                 <div className="grow">
                   <div className="qcard-title">{c.complaint}</div>
@@ -111,6 +127,11 @@ export function DoctorHistoryPage() {
                 <span className="row"><span className="mono faint">{formatTime(c.closedAt)}</span><span className="accent">Open →</span></span>
               </div>
             </Link>
+            <button type="button" className="history-delete" disabled={deleting === c.visitId}
+              aria-label={`Delete case #${c.visitId}`} title="Delete this case" onClick={() => void remove(c.visitId)}>
+              {deleting === c.visitId ? '…' : 'Delete'}
+            </button>
+            </div>
           ))}
         </div>
       )}

@@ -13,10 +13,11 @@
 //   POST /api/doctor/visits/:id/appointment  offer in-person appointment times
 //   POST /api/doctor/visits/:id/notes        private note (never shown to the patient)
 //   POST /api/doctor/visits/:id/escalate     send the patient to the triage desk
+//   POST /api/doctor/visits/:id/delete       delete a past case (advice sent or meeting scheduled)
 import express from 'express';
 import { requireDoctor, requireVisit } from './access.js';
 import * as db from './db.js';
-import { notifyVisit } from './events.js';
+import { notifyVisit, publish } from './events.js';
 
 const ORDER_TYPES = new Set(['lab', 'imaging', 'referral', 'other']);
 const MAX_ITEMS = 10;
@@ -85,12 +86,14 @@ export function parseDoctorReply(body, suggestedCtas) {
   return { message, diagnosis, summary, confirmedCtas: ctas, ctasOverrideReason: reason || null, prescriptions, orders };
 }
 
-/** In-person appointment offer: 1 to 4 future times (ISO strings) at one location. */
+/** In-person appointment offer: 1 to 4 future times (ISO strings) at one location, and an optional description. */
 export function parseAppointmentOffer(body, now = Date.now()) {
   const message = text(body?.message, 5000);
   const location = text(body?.location, 200);
+  const description = optionalText(body?.description, 2000);
   if (!message) return { error: 'Write the message for the patient.' };
   if (!location) return { error: 'Say where the appointment is.' };
+  if (description === null) return { error: 'The description can be at most 2000 characters.' };
   if (!Array.isArray(body?.slots) || body.slots.length < 1 || body.slots.length > MAX_SLOTS) {
     return { error: `Offer between 1 and ${MAX_SLOTS} times.` };
   }
@@ -98,7 +101,7 @@ export function parseAppointmentOffer(body, now = Date.now()) {
   if (times.some((t) => Number.isNaN(t))) return { error: 'Each time must be a date and time, like 2026-11-08T14:30:00-05:00.' };
   if (times.some((t) => t < now + MIN_LEAD_MS || t > now + MAX_AHEAD_MS)) return { error: 'Times must be at least 15 minutes from now and within 60 days.' };
   if (new Set(times).size !== times.length) return { error: 'Each time can only be offered once.' };
-  return { message, location, slots: times.sort((a, b) => a - b).map((t) => new Date(t).toISOString()) };
+  return { message, location, description, slots: times.sort((a, b) => a - b).map((t) => new Date(t).toISOString()) };
 }
 
 // ---- Helpers ----
@@ -250,6 +253,19 @@ doctorRouter.post(
     await db.escalateVisit(req.visitId, [`Doctor: ${reason}`]);
     await db.logAccess(req.doctor.id, req.visitId, 'escalated');
     await notifyVisit(req.visitId, 'status_changed');
+    res.json({ ok: true });
+  }),
+);
+
+// Removes a past case from the history for good: the chat, prescriptions, tests and
+// appointment go with it. The access log keeps a "deleted" entry for the patient.
+doctorRouter.post(
+  '/doctor/visits/:id/delete',
+  ...doctorCase,
+  route(async (req, res) => {
+    const patientId = await db.deleteHistoryVisit(req.visitId, req.doctor.id);
+    if (!patientId) return fail(res, 409, 'wrong_status', 'Only cases in the history (advice sent or meeting scheduled) can be deleted.');
+    publish({ visitId: req.visitId, patientId, reason: 'status_changed', audience: 'both' });
     res.json({ ok: true });
   }),
 );

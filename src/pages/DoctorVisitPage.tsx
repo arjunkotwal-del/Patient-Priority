@@ -211,6 +211,7 @@ export function DoctorVisitPage() {
               <div className="entry">
                 <strong>In person · {visit.appointment.status === 'booked' ? 'booked' : 'waiting for the patient to pick'}</strong>
                 <span>{visit.appointment.location} · {visit.appointment.doctorName}</span>
+                {visit.appointment.description && <span className="muted">{visit.appointment.description}</span>}
                 {visit.appointment.slots.map((s) => (
                   <span key={s.id} className={s.chosen ? 'accent mono' : 'mono'}>{time(s.startsAt)}{s.chosen && ' · chosen'}</span>
                 ))}
@@ -452,13 +453,14 @@ function ReplyForm({ act, suggestedCtas }: { act: Act; suggestedCtas: number | n
 
 /** In-person appointment: 1 to 4 times at one place. The patient picks one. */
 function AppointmentForm({ act }: { act: Act }) {
-  const empty = { message: '', location: '', slots: ['', '', '', ''] };
+  const empty = { message: '', location: '', description: '', slots: ['', '', '', ''] };
   const [v, setV] = useState(empty);
   const form = useSubmit(
     () =>
       act('appointment', {
         message: v.message,
         location: v.location,
+        description: v.description.trim() || undefined,
         // datetime-local has no time zone; new Date() reads it as the doctor's local time.
         slots: v.slots.filter(Boolean).map((s) => new Date(s).toISOString()),
       }),
@@ -476,6 +478,11 @@ function AppointmentForm({ act }: { act: Act }) {
       <label>
         Location
         <input value={v.location} maxLength={200} required onChange={(e) => setV({ ...v, location: e.target.value })} placeholder="ER fast track, room 2" />
+      </label>
+      <label>
+        Description <span className="muted small">(optional, the patient sees this)</span>
+        <textarea value={v.description} rows={3} maxLength={2000} onChange={(e) => setV({ ...v, description: e.target.value })}
+          placeholder="What the meeting is for, how long it takes, what to bring." />
       </label>
       <fieldset className="items">
         <legend>Times to offer (1 to 4, at least 15 minutes from now)</legend>
