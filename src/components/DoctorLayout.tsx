@@ -14,8 +14,8 @@ export function DoctorLayout() {
           <span><strong>PatientPriority</strong><span>Doctor workstation</span></span>
         </NavLink>
         <nav className="side-nav" aria-label="Clinical navigation">
-          <NavLink to="/doctor" end><Icon name="queue" />Patient queue</NavLink>
-          <NavLink to="/doctor/settings"><Icon name="settings" />Settings</NavLink>
+          <NavLink to="/doctor" end><Icon name="format_list_bulleted" size={18} />Patient queue</NavLink>
+          <NavLink to="/doctor/settings"><Icon name="settings" size={18} />Settings</NavLink>
         </nav>
         <div className="side-foot">
           <div className="side-user">
@@ -24,7 +24,7 @@ export function DoctorLayout() {
               <strong>{doctor?.name}</strong>
               <span>{user?.email}</span>
             </div>
-            <button className="btn btn-ghost" onClick={logout} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
+            <button className="btn btn-ghost" onClick={logout} aria-label="Log out" title="Log out"><Icon name="logout" size={18} /></button>
           </div>
         </div>
       </aside>

@@ -1,48 +1,75 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { Icon, initials } from './Icon';
+import { callApi, type MyVisits } from '../pages/patientApi';
+import { Icon } from './Icon';
 
-/** The patient portal: sidebar navigation, a top bar, and the page. */
+/** The patient portal, laid out like the Stitch "Main chat" screen: fixed sidebar, glass top bar, page. */
 export function AppLayout() {
-  const { user, logout } = useAuth();
+  const { getToken } = useAuth();
+  const { pathname } = useLocation();
+  const [unread, setUnread] = useState(0);
+
+  // The notifications dot: re-checked on every page change.
+  useEffect(() => {
+    callApi<MyVisits>(getToken, '/me/visits')
+      .then((d) => setUnread(d.unreadTotal))
+      .catch(() => {});
+  }, [getToken, pathname]);
+
+  const nav = [
+    { to: '/visits', icon: 'chat_bubble', label: 'Main Chat', end: true },
+    { to: '/history', icon: 'history_edu', label: 'My Medical History' },
+    { to: '/care-plan', icon: 'vital_signs', label: 'Care Plan' },
+    { to: '/notifications', icon: 'notifications', label: 'Doctor Notifications', dot: unread > 0 },
+  ];
+
   return (
-    <div className="shell">
+    <div className="portal">
       <a className="skip-link" href="#main-content">Skip to content</a>
-      <aside className="side">
-        <NavLink to="/visits" className="side-brand">
-          <span className="logo" aria-hidden="true">+</span>
-          <span><strong>PatientPriority</strong><span>Patient portal</span></span>
-        </NavLink>
-        <nav className="side-nav" aria-label="Patient navigation">
-          <NavLink to="/visits" end><Icon name="chat" />Main chat</NavLink>
-          <NavLink to="/history"><Icon name="history" />My medical history</NavLink>
-          <NavLink to="/account"><Icon name="user" />Account</NavLink>
-          <NavLink to="/settings"><Icon name="settings" />Settings</NavLink>
-        </nav>
-        <div className="side-foot">
-          <div className="side-note">
-            <span className="eyebrow">Fast track</span>
-            <strong>CTAS 4 and 5 only</strong>
-          </div>
-          <div className="side-user">
-            <span className="avatar" aria-hidden="true">{initials(user?.name)}</span>
-            <div>
-              <strong>{user?.name}</strong>
-              <span>{user?.email}</span>
-            </div>
-            <button className="btn btn-ghost" onClick={logout} aria-label="Log out" title="Log out"><Icon name="logout" /></button>
-          </div>
+      <aside className="portal-side">
+        <div className="portal-side-top">
+          <Link to="/visits" className="portal-brand">
+            <span className="portal-logo"><Icon name="neurology" size={22} /></span>
+            <span>
+              <strong>PatientPriority</strong>
+              <small>Patient portal</small>
+            </span>
+          </Link>
+          <nav className="portal-nav" aria-label="Patient navigation">
+            {nav.map((n) => (
+              <NavLink key={n.to} to={n.to} end={n.end}>
+                <span className="portal-nav-label"><Icon name={n.icon} size={20} />{n.label}</span>
+                {n.dot && <span className="portal-dot" aria-label={`${unread} unread`} />}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+        <div className="portal-side-box">
+          <span>
+            <small>Fast track</small>
+            <strong>CTAS 4 and 5</strong>
+          </span>
+          <Icon name="verified_user" size={18} />
         </div>
       </aside>
-      <div className="main">
-        <header className="topbar">
-          <span className="topbar-title">Virtual fast track</span>
-          <span className="on-duty"><span className="dot dot-slate" aria-hidden="true" />Doctors reply here</span>
-        </header>
-        <main id="main-content">
-          <Outlet />
-        </main>
-      </div>
+
+      <header className="portal-top">
+        <nav className="portal-top-nav" aria-label="Sections">
+          <NavLink to="/visits" end>Consultation</NavLink>
+          <NavLink to="/history">Medical History</NavLink>
+          <NavLink to="/care-plan">Care Plan</NavLink>
+          <NavLink to="/settings">Settings</NavLink>
+        </nav>
+        <div className="portal-top-right">
+          <span className="portal-duty"><span className="portal-duty-dot" />Doctors on duty</span>
+          <Link to="/account" className="portal-me" aria-label="Your account"><Icon name="person" size={18} /></Link>
+        </div>
+      </header>
+
+      <main className="portal-main" id="main-content">
+        <Outlet />
+      </main>
     </div>
   );
 }

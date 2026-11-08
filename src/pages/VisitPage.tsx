@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { Bubble, ComposerCard, Composer, Suggestions, Typing } from '../components/Chat';
+import { Bubble, ComposerCard, Composer, DoctorCard, HeaderCard, Stamp, Suggestions, Typing } from '../components/Chat';
 import { notifyIfHidden, subscribeToUpdates } from '../lib/live';
 import { PATIENT_STATUS, callApi, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
+import { NotifyButton, displayName } from './VisitsPage';
 
 const ORDER_LABELS = { lab: 'Lab test', imaging: 'Imaging', referral: 'Referral', other: 'Other' } as const;
+
+/** What the doctor card at the bottom of the chat says for each status. */
+const DOCTOR_LINE: Record<string, string> = {
+  interviewing: 'Will review your answers once the questions are done',
+  waiting_for_doctor: 'Reviewing your answers · They will reply here',
+  appointment_offered: 'Would like to see you in person · Pick a time below',
+  appointment_booked: 'Your in-person appointment is booked',
+  resolved: 'Replied · Your care plan is below',
+  escalated: 'Would like to see you in person · Check in at the front desk',
+};
 
 /**
  * One visit as a single chat: the complaint, the check-in answers, the AI follow-ups, then the
@@ -13,7 +24,7 @@ const ORDER_LABELS = { lab: 'Lab test', imaging: 'Imaging', referral: 'Referral'
  */
 export function VisitPage() {
   const { id = '' } = useParams();
-  const { getToken } = useAuth();
+  const { getToken, user } = useAuth();
   const [visit, setVisit] = useState<PatientVisitView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
@@ -53,17 +64,18 @@ export function VisitPage() {
 
   if (error && !visit) {
     return (
-      <div className="page page-narrow">
+      <div className="sc-page">
         <Link to="/visits" className="back">← Main chat</Link>
         <p className="error">{error}</p>
       </div>
     );
   }
-  if (!visit) return <div className="page page-narrow"><p className="muted">Loading…</p></div>;
+  if (!visit) return <div className="sc-page"><p className="muted">Loading…</p></div>;
 
   const interviewing = visit.status === 'interviewing';
   const last = visit.messages.at(-1);
   const question = interviewing && last?.from === 'ai' && last.kind === 'question' ? last : null;
+  const name = displayName(user?.name);
 
   // One answer at a time: two taps would make two AI questions.
   const send = async (answer: string) => {
@@ -99,60 +111,55 @@ export function VisitPage() {
   const afterCheckIn = startsWithComplaint ? rest : visit.messages;
 
   return (
-    <div className="page page-narrow">
-      <Link to="/visits" className="back">← Main chat</Link>
-      <section className="card welcome">
-        <div>
-          <span className="eyebrow">Consultation #{visit.id} · started {formatDate(visit.startedAt)}</span>
-          <h1>{visit.complaint}</h1>
-          <div className="welcome-meta">
-            <span className={`status status-${visit.status}`}>{PATIENT_STATUS[visit.status]}</span>
-          </div>
-        </div>
-        {visit.doctorName && <span className="on-duty"><span className="dot dot-slate" aria-hidden="true" />{visit.doctorName}</span>}
-      </section>
+    <div className="sc-page">
+      <HeaderCard
+        name={user?.name}
+        title={`Welcome back${name ? `, ${name}` : ''}`}
+        chip={`Visit #${visit.id}`}
+        sub={`${PATIENT_STATUS[visit.status]} · ${visit.complaint}`}
+        attending={visit.doctorName ?? 'Doctor on duty'}
+        attendingSub={`Started ${formatDate(visit.startedAt)}`}
+      />
 
-      <section className="card chat-panel" aria-live="polite">
-        <span className="chat-stamp">Private consultation · {formatDate(visit.startedAt)}</span>
-        <ul className="thread">
-          <Bubble from="patient" text={visit.complaint} time={startsWithComplaint ? first.sentAt : visit.startedAt} />
+      <section className="sc-chat" aria-live="polite">
+        <Stamp>Private consultation · {formatDate(visit.startedAt)}</Stamp>
+        <ul className="sc-thread">
+          <Bubble from="patient" text={visit.complaint} time={startsWithComplaint ? first.sentAt : visit.startedAt} patientName={user?.name} />
           {visit.premadeAnswers.map((qa, i) => (
             <li key={`qa${i}`} className="thread-pair">
-              <ul className="thread">
+              <ul>
                 <Bubble from="ai" text={qa.question} />
-                <Bubble from="patient" text={qa.answer} />
+                <Bubble from="patient" text={qa.answer} patientName={user?.name} />
               </ul>
             </li>
           ))}
           {afterCheckIn.map((m, i) => (
-            <Bubble key={i} from={m.from} text={m.text} time={m.sentAt} doctorName={visit.doctorName} />
+            <Bubble key={i} from={m.from} text={m.text} time={m.sentAt} patientName={user?.name} doctorName={visit.doctorName} />
           ))}
-          {sending && <Bubble from="patient" text={sending} pending />}
+          {sending && <Bubble from="patient" text={sending} patientName={user?.name} pending />}
           {sending && <Typing />}
           {question && !sending && <Suggestions options={question.options ?? []} onPick={(o) => void send(o)} />}
           {interviewing && !question && !sending && <Typing />}
+          <DoctorCard
+            name={visit.doctorName ?? 'Doctor on duty'}
+            line={DOCTOR_LINE[visit.status]}
+            action={visit.status === 'waiting_for_doctor' || interviewing ? <NotifyButton /> : undefined}
+          />
         </ul>
         {sendError && <p className="error">{sendError}</p>}
         <div ref={endRef} />
       </section>
 
-      {visit.status === 'waiting_for_doctor' && <Waiting visit={visit} />}
       {visit.status === 'appointment_offered' && <AppointmentPicker visit={visit} path={path} onBooked={setVisit} reload={load} />}
       {visit.status === 'appointment_booked' && <Booked visit={visit} />}
       {visit.status === 'resolved' && <Plan visit={visit} />}
-      {visit.status === 'escalated' && (
-        <section className="card stack-sm">
-          <h2>Your doctor would like to see you in person</h2>
-          <p className="muted">Please check in at the front desk and show them this page.</p>
-        </section>
-      )}
 
       {interviewing ? (
         <Composer
           autoFocus
           disabled={!question || !!sending}
           onSend={(t) => void send(t)}
-          placeholder={question?.options?.length ? 'Tap an answer above, or type your own…' : 'Type your answer…'}
+          placeholder={question?.options?.length ? 'Tap a suggested answer, or type your own…' : 'Type your answer…'}
         />
       ) : (
         <ClosedChat replied={visit.status !== 'waiting_for_doctor'} />
@@ -170,28 +177,11 @@ export function VisitPage() {
 function ClosedChat({ replied }: { replied: boolean }) {
   return (
     <ComposerCard>
-      <div className="composer composer-closed" role="status">
-        <span className="muted">
-          {replied ? 'The doctor has replied, so this chat is closed.' : 'Your answers are with the doctor. This chat is closed while they review.'}
-        </span>
-        <Link to="/visits" className="btn btn-secondary">Start a new visit</Link>
+      <div className="sc-closed" role="status">
+        <span>{replied ? 'The doctor has replied, so this chat is closed.' : 'Your answers are with the doctor. This chat is closed while they review.'}</span>
+        <Link to="/visits" className="sc-doctor-btn">Start a new visit</Link>
       </div>
     </ComposerCard>
-  );
-}
-
-function Waiting({ visit }: { visit: PatientVisitView }) {
-  return (
-    <section className="card waiting">
-      <div className="pulse" aria-hidden />
-      <div className="stack-sm">
-        <h2>Thanks. A doctor will review your answers and reply here.</h2>
-        <p className="muted">
-          You can close this page. If notifications are on, we'll let you know when they reply.
-          {visit.doctorName && ` ${visit.doctorName} has your case.`}
-        </p>
-      </div>
-    </section>
   );
 }
 

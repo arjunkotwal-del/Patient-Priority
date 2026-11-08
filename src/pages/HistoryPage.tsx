@@ -8,7 +8,7 @@ export function HistoryPage() {
   const past = data?.visits.filter((v) => !OPEN_STATUSES.includes(v.status)) ?? [];
 
   return (
-    <div className="page page-narrow">
+    <div className="sc-page">
       <div className="page-head">
         <div>
           <span className="eyebrow">Your records</span>
