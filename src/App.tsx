@@ -5,7 +5,10 @@ import { DoctorLayout } from './components/DoctorLayout';
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { VerifyPage } from './pages/VerifyPage';
-import { MedicalPage } from './pages/MedicalPage';
+import { VisitsPage } from './pages/VisitsPage';
+import { NewVisitPage } from './pages/NewVisitPage';
+import { VisitPage } from './pages/VisitPage';
+import { HistoryPage } from './pages/HistoryPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AccountPage } from './pages/AccountPage';
 import { DoctorQueuePage } from './pages/DoctorQueuePage';
@@ -28,12 +31,17 @@ export default function App() {
         <Route path="/verify" element={<VerifyPage />} />
       </Route>
 
-      {/* Logged in and verified */}
+      {/* Patients: logged in and verified */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route path="/medical" element={<MedicalPage />} />
+          <Route path="/visits" element={<VisitsPage />} />
+          <Route path="/visits/new" element={<NewVisitPage />} />
+          <Route path="/visits/:id" element={<VisitPage />} />
+          <Route path="/history" element={<HistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/account" element={<AccountPage />} />
+          {/* Old link from the previous UI. */}
+          <Route path="/medical" element={<Navigate to="/visits" replace />} />
         </Route>
       </Route>
 
