@@ -16,7 +16,11 @@ function updateText(v: VisitSummary) {
 /** Doctor notifications: unread replies and anything waiting on the patient. */
 export function NotificationsPage() {
   const { visits, unreadTotal, error, refresh } = usePatientVisits();
-  const updates = (visits ?? []).filter((v) => v.unreadCount > 0 || v.status === 'appointment_offered' || v.status === 'escalated');
+  // Only things a doctor actually did: an unread reply, offered times, or a doctor escalating the
+  // visit. Old visits closed automatically (no doctor on them) are not doctor updates.
+  const updates = (visits ?? []).filter(
+    (v) => v.unreadCount > 0 || v.status === 'appointment_offered' || (v.status === 'escalated' && v.doctorName),
+  );
 
   return (
     <div className="dashboard-page">
