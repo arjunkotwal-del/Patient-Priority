@@ -413,6 +413,8 @@ export function toPatientView(visit, unreadCount = 0) {
     doctorName: visit.doctor?.name ?? visit.assignedDoctor?.name ?? null,
     diagnosis: visit.diagnosis,
     plan: visit.plan,
+    // The patient's own check-in answers, so their chat shows the whole conversation.
+    premadeAnswers: visit.premadeAnswers ?? [],
     messages: visit.messages,
     prescriptions: visit.prescriptions,
     orders: visit.orders,

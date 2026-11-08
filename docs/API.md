@@ -81,6 +81,7 @@ The patient view. It never contains the SOAP note, red flags, CTAS levels or doc
   "id": 12, "status": "resolved", "complaint": "My throat really hurts",
   "startedAt": "2026-11-07T15:00:00.000Z", "resolvedAt": "2026-11-07T15:40:00.000Z",
   "doctorName": "Dr. Sam Rivera (demo)", "diagnosis": "Viral sore throat", "plan": "Rest and fluids.",
+  "premadeAnswers": [{ "question": "When did it start?", "answer": "1 to 3 days ago" }],
   "messages": [
     { "from": "patient", "kind": "answer", "text": "My throat really hurts", "sentAt": "...", "options": null },
     { "from": "ai", "kind": "question", "text": "Is it hard to swallow your own spit?", "options": ["Yes", "No"], "sentAt": "..." },

@@ -102,6 +102,8 @@ export interface PatientVisitView {
   doctorName: string | null;
   diagnosis: string | null;
   plan: string | null;
+  /** The patient's own answers to the set check-in questions. */
+  premadeAnswers: QuestionAnswer[];
   messages: Message[];
   prescriptions: Prescription[];
   orders: Order[];
