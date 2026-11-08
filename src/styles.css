@@ -4,10 +4,10 @@
   --text: #183345;
   --muted: #3e5361;
   --border: #dbe4e8;
-  --accent: #086d59;
-  --blue: #17649a;
-  --green-soft: #edf7f2;
-  --blue-soft: #edf5fb;
+  --accent: #0759a6;
+  --blue: #006a9e;
+  --accent-soft: #eaf5ff;
+  --blue-soft: #e8f8fd;
   --accent-text: #ffffff;
   --danger: #b83232;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -21,11 +21,11 @@
   --text: #e8eaee;
   --muted: #9aa1ad;
   --border: #2a2e37;
-  --accent: #83c2ff;
+  --accent: #72caff;
   --accent-text: #102437;
-  --blue: #8ec7f0;
-  --green-soft: #172d29;
-  --blue-soft: #182b3b;
+  --blue: #64d8f2;
+  --accent-soft: #102d46;
+  --blue-soft: #102f3d;
   --danger: #ff9393;
 }
 :root[data-font-size='large'] {
@@ -38,14 +38,14 @@
     --text: #e8eaee;
     --muted: #9aa1ad;
     --border: #2a2e37;
-    --accent: #83c2ff;
+    --accent: #72caff;
     --accent-text: #102437;
-    --blue: #8ec7f0;
-    --green-soft: #172d29;
-    --blue-soft: #182b3b;
+    --blue: #64d8f2;
+    --accent-soft: #102d46;
+    --blue-soft: #102f3d;
     --danger: #ff9393;
   }
-  :root:not([data-theme='light']) .clinic { --accent: #2dd4bf; --accent-text: #042f2e; }
+  :root:not([data-theme='light']) .clinic { --accent: #72caff; --accent-text: #102437; }
 }
 
 * { box-sizing: border-box; }
@@ -96,7 +96,6 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 }
 .topbar > .btn { margin-left: auto; }
 .brand { display: inline-flex; align-items: center; gap: 0.65rem; font-weight: 750; font-size: 1.15rem; letter-spacing: -0.035em; color: var(--text); text-decoration: none; white-space: nowrap; }
-.brand-mark { display: inline-grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 7px; background: var(--accent); color: var(--accent-text); font-size: 30px; font-weight: 500; line-height: 1; }
 .topbar nav { display: flex; gap: 1rem; }
 .topbar nav a { display: inline-flex; align-items: center; min-height: 44px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; }
 .topbar nav a:hover, .topbar nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
@@ -116,14 +115,14 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .hero-description { font-size: 1.08rem; max-width: 470px; color: var(--muted); margin: 0 0 32px; }
 .hero-note { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.75rem; margin: 20px 0 0; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
-.care-guide { background: var(--green-soft); border: 1px solid var(--border); border-top: 4px solid var(--accent); border-radius: 8px; padding: 28px 32px 0; }
+.care-guide { background: var(--accent-soft); border: 1px solid var(--border); border-top: 4px solid var(--accent); border-radius: 8px; padding: 28px 32px 0; }
 .guide-header { display: flex; align-items: center; justify-content: space-between; }
 .guide-header .eyebrow { margin: 0; font-size: 0.65rem; }
 .guide-symbol { color: var(--accent); font-size: 30px; line-height: 1; }
 .care-guide h2 { font-size: 1.5rem; margin: 24px 0; }
 .journey-list { list-style: none; padding: 0; margin: 0; }
 .journey-list li { display: flex; gap: 16px; padding: 20px 0; border-top: 1px solid var(--border); }
-.step-number { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #b6d8ca; border-radius: 50%; color: var(--accent); flex-shrink: 0; font-size: 0.8rem; font-weight: 700; background: var(--surface); }
+.step-number { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #b4d6f0; border-radius: 50%; color: var(--accent); flex-shrink: 0; font-size: 0.8rem; font-weight: 700; background: var(--surface); }
 .journey-list h3 { font-size: 0.95rem; margin: 2px 0 6px; letter-spacing: -0.015em; }
 .journey-list p { font-size: 0.85rem; color: var(--muted); margin: 0; }
 .guide-footer { padding: 18px 0; margin-top: 4px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 8px; font-size: 0.75rem; color: var(--muted); }
@@ -178,7 +177,7 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 .auth-intro { align-self: center; max-width: 440px; }
 .auth-intro h2 { font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing: -0.045em; font-weight: 650; margin: 0 0 24px; }
 .auth-intro > p:not(.eyebrow), .auth-help p { color: var(--muted); }
-.auth-help { margin-top: 48px; padding: 24px; border-left: 3px solid var(--accent); background: var(--green-soft); font-size: 0.9rem; }
+.auth-help { margin-top: 48px; padding: 24px; border-left: 3px solid var(--accent); background: var(--accent-soft); font-size: 0.9rem; }
 .auth-help p { margin: 8px 0 0; }
 .login-page .auth-card { max-width: 440px; padding: 40px; gap: 16px; border-radius: 8px; box-shadow: 0 12px 48px #18334508; }
 .auth-card .eyebrow { margin: 12px 0 0; }
@@ -215,7 +214,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .toc li { margin-bottom: 0.4rem; }
 .toc a { color: var(--text); text-decoration: none; }
 .toc a { display: block; min-height: 44px; padding: 8px 12px; border-left: 2px solid var(--border); font-size: 0.85rem; }
-.toc a:hover { color: var(--accent); background: var(--green-soft); border-color: var(--accent); }
+.toc a:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
 .medical-body { min-width: 0; background: var(--surface); padding: 32px; border: 1px solid var(--border); border-radius: 8px; }
 .medical-body section { scroll-margin-top: 5rem; padding: 1.5rem 0; border-bottom: 1px solid var(--border); }
 
@@ -252,7 +251,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
 }
 .scanner-guide { transition: border-color 0.15s; }
-.scanner-guide.locking { border-color: #22c55e; }
+.scanner-guide.locking { border-color: #25c9ed; }
 .scanner-hint {
   position: absolute;
   bottom: 0.5rem;
@@ -268,7 +267,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 }
 .scanner-hint p { margin: 0; }
 .scanner-progress { width: 40%; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); overflow: hidden; }
-.scanner-progress span { display: block; height: 100%; background: #22c55e; transform-origin: left; transition: transform 0.15s; }
+.scanner-progress span { display: block; height: 100%; background: #25c9ed; transform-origin: left; transition: transform 0.15s; }
 .scanner-preview { width: 100%; border-radius: 12px; border: 1px solid var(--border); display: block; }
 .scanner-empty {
   aspect-ratio: 85.6 / 54;
@@ -319,8 +318,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .ctas-1 { background: #b91c1c; }
 .ctas-2 { background: #dc2626; }
 .ctas-3 { background: #ca8a04; }
-.ctas-4 { background: #15803d; }
-.ctas-5 { background: #1d4ed8; }
+.ctas-4 { background: #007caf; }
+.ctas-5 { background: #07488d; }
 .priority { flex-shrink: 0; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 600; font-size: 0.85rem; white-space: nowrap; border: 1px solid currentColor; }
 .priority-high { color: #b91c1c; background: #fef2f2; }
 .priority-medium { color: #a16207; background: #fefce8; }
@@ -340,7 +339,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .history-search input[type='search'], .history-search select { min-height: 42px; }
 .history-search .checkbox { flex-direction: row; align-items: center; min-height: 42px; }
 .queue-item-date { flex-shrink: 0; font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
-.pill-advice { background: var(--green-soft); color: var(--accent); }
+.pill-advice { background: var(--accent-soft); color: var(--accent); }
 
 .card.alert { border-color: var(--danger); }
 .card.alert h3 { color: var(--danger); }
@@ -364,15 +363,15 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
   .chat-msg { max-width: 100%; }
 }
 
-/* Clinician workspace: white surfaces, green navigation and unchanged triage colours. */
+/* Clinician workspace: white surfaces and shared logo-blue accents. */
 .clinic {
-  --accent: #0f766e;
+  --accent: #0759a6;
   --accent-text: #ffffff;
   display: grid;
   grid-template-columns: 240px 1fr;
   min-height: 100vh;
 }
-:root[data-theme='dark'] .clinic { --accent: #2dd4bf; --accent-text: #042f2e; }
+:root[data-theme='dark'] .clinic { --accent: #72caff; --accent-text: #102437; }
 .clinic-nav {
   position: sticky;
   top: 0;
@@ -387,11 +386,11 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 }
 .clinic-brand { display: flex; flex-direction: column; gap: 0.35rem; padding: 0 0.5rem; }
 .clinic-brand .brand { color: var(--text); font-size: 1rem; }
-.clinic-tag { align-self: flex-start; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.25rem 0.6rem; border-radius: 4px; background: var(--green-soft); color: var(--accent); font-weight: 700; margin-top: 12px; }
+.clinic-tag { align-self: flex-start; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.25rem 0.6rem; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-weight: 700; margin-top: 12px; }
 .clinic-nav nav { display: flex; flex-direction: column; gap: 0.25rem; }
 .clinic-nav nav a { color: var(--muted); text-decoration: none; min-height: 46px; padding: 0.65rem 0.75rem; border-radius: 6px; border-left: 3px solid transparent; }
 .clinic-nav nav a:hover { background: var(--bg); color: var(--text); }
-.clinic-nav nav a.active { background: var(--green-soft); color: var(--accent); font-weight: 600; border-left-color: var(--accent); }
+.clinic-nav nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; border-left-color: var(--accent); }
 .clinic-user { margin-top: auto; display: flex; flex-direction: column; gap: 0.25rem; padding: 0 0.5rem; font-size: 0.9rem; }
 .clinic-user span { color: var(--muted); overflow-wrap: anywhere; }
 .clinic-user .btn-ghost { margin-top: 0.5rem; }
@@ -475,7 +474,6 @@ textarea { font: inherit; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1
 }
 @media (max-width: 420px) {
   .public-header .brand { font-size: 1rem; gap: 8px; }
-  .brand-mark { width: 30px; height: 30px; font-size: 26px; }
   .public-header > .btn { padding-inline: 12px; }
   .public-header > .btn span { display: none; }
   .hero .btn { width: 100%; }
@@ -495,3 +493,8 @@ textarea { font: inherit; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* The supplied logo includes its wordmark; keep its original proportions. */
+.brand-logo { display: block; width: 160px; height: auto; flex-shrink: 0; object-fit: contain; }
+.auth-card > .brand-logo { width: 180px; max-width: 100%; align-self: center; }
+@media (max-width: 600px) { .public-header .brand-logo { width: 112px; } }

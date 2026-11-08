@@ -1,3 +1,4 @@
+import { BrandLogo } from '../components/BrandLogo';
 ﻿import { Link } from 'react-router-dom';
 
 export function LandingPage() {
@@ -6,7 +7,7 @@ export function LandingPage() {
       <div className="utility-bar"><div className="site-width">Patient information & clinical care <span>Patient Priority</span></div></div>
       <header className="topbar public-header">
         <a className="skip-link" href="#main-content">Skip to content</a>
-        <Link to="/" className="brand"><span className="brand-mark" aria-hidden="true">+</span>Patient Priority</Link>
+        <Link to="/" className="brand"><BrandLogo /></Link>
         <nav aria-label="Main navigation"><a href="#how-it-works">How it works</a><a href="#care-access">Access your care</a></nav>
         <Link to="/login" className="btn btn-ghost">Log in <span aria-hidden="true">↗</span></Link>
       </header>
@@ -40,7 +41,7 @@ export function LandingPage() {
         </section>
         <section className="how-section" id="how-it-works" aria-labelledby="how-title"><div className="site-width how-layout"><div><p className="eyebrow">BEFORE YOU BEGIN</p><h2 id="how-title">Account access & preparation.</h2><p className="muted">Simple steps so you know what to expect.</p></div><div className="info-list"><div><h3>One account to get started</h3><p>New here? Choose “Create an account” on the login page. Returning users can log in with their existing account.</p></div><div><h3>Health card verification for patients</h3><p>Patients verify their Ontario health card before starting a visit. Doctors have their own login, set up by the clinic, and never need a health card.</p></div><div><h3>Text size and appearance</h3><p>Adjust text size and appearance in Settings once you are signed in.</p></div></div></div></section>
       </main>
-      <footer className="footer site-width"><Link to="/" className="brand">Patient Priority</Link><span>Patient information. Care team access.</span><span>© {new Date().getFullYear()} Patient Priority</span></footer>
+      <footer className="footer site-width"><Link to="/" className="brand"><BrandLogo /></Link><span>Patient information. Care team access.</span><span>© {new Date().getFullYear()} Patient Priority</span></footer>
     </div>
   );
 }

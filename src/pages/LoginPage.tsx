@@ -1,3 +1,4 @@
+import { BrandLogo } from '../components/BrandLogo';
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -19,7 +20,7 @@ export function LoginPage() {
       <Link to="/" className="auth-back">← Back to Patient Priority</Link>
       <aside className="auth-intro"><p className="eyebrow">PATIENT PRIORITY</p><h2>Your care.<br />One place to begin.</h2><p>Start a visit with your patient account, or create one to get started.</p><div className="auth-help"><strong>First visit?</strong><p>Patients will need their Ontario health card for verification after creating an account.</p></div></aside>
       <main className="auth-card" id="main-content">
-        <span className="brand-mark" aria-hidden="true">+</span>
+        <BrandLogo />
         <p className="eyebrow">ACCOUNT ACCESS</p>
         <h1>Welcome back</h1>
         <p className="muted">Log in or create your patient account.</p>

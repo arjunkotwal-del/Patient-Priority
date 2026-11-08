@@ -1,3 +1,4 @@
+import { BrandLogo } from '../components/BrandLogo';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, type Verification } from '../auth/AuthContext';
@@ -216,7 +217,7 @@ export function VerifyPage() {
   return (
     <div className="landing">
       <header className="topbar">
-        <span className="brand">Patient Priority</span>
+        <span className="brand"><BrandLogo /></span>
         <div className="topbar-user">
           <span>{user?.email}</span>
           <button className="btn btn-ghost" onClick={logout}>Log out</button>

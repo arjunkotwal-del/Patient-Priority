@@ -1,3 +1,4 @@
+import { BrandLogo } from './BrandLogo';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Icon, type IconName } from './LineIcon';
@@ -117,10 +118,7 @@ export function WorkspaceShell({ role, name, email, items, logout, children }: P
             to={role === 'doctor' ? '/doctor' : '/dashboard'}
             aria-label="Patient Priority dashboard"
           >
-            <span className="brand-mark" aria-hidden="true">
-              +
-            </span>
-            <span className="sidebar-label">Patient Priority</span>
+            <BrandLogo />
           </Link>
           <button
             className="icon-button mobile-only"

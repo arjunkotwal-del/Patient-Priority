@@ -2,7 +2,7 @@ GATE: OPEN 29 (rounds used up)
 
 # Frontend design review
 
-Patient Priority is a hospital-oriented software interface. The main action is account access. The design uses the requested white primary surface, green for patient actions, blue for clinician access and information, and red for alerts. Existing CTAS colours and labels remain intact. System fonts keep the interface familiar and avoid remote font dependencies.
+Patient Priority is a hospital-oriented software interface. The main action is account access. The design uses the requested white primary surface and blues drawn from the supplied Patient Priority logo: deep blue for actions, cyan for supporting accents, and pale blue for selected states. Red and amber retain their alert meanings. CTAS labels remain intact; levels 4 and 5 use distinct blues. System fonts keep the interface familiar and avoid remote font dependencies.
 
 ## Toronto hospital comparison
 
@@ -18,7 +18,7 @@ Reviewed November 7, 2026. These references informed the information hierarchy; 
 
 - Landing page: compact introduction, numbered patient journey, emergency notice, role-specific entry cards, and preparation information.
 - Login page: existing login/signup actions and redirect destination preserved, with clearer context and account creation wording.
-- Shared patient and clinician shells: white surfaces, green navigation, consistent controls, visible focus indicators, skip links, larger input targets, and responsive layouts.
+- Shared patient and clinician shells: white surfaces, blue navigation, consistent controls, visible focus indicators, skip links, larger input targets, and responsive layouts.
 - White is the default appearance; explicitly selected dark mode and large text preferences remain available.
 - Copy is factual and task-based. No hospital affiliation, clinical statistics, testimonials, stock photographs, or invented patient data are introduced.
 - The brief's simple hospital-use requirement takes precedence over the skill's full-screen sections, decorative moments, shader effects, and animation recipes. Only a short entrance and restrained interaction feedback are used, with reduced-motion support.
@@ -98,3 +98,9 @@ The checker uses the development server and could not inspect the full developme
 - **section-gaps** (390): section#care-access / section#how-it-works. 90px between these sections, +30% against the median 69px
 
 Warnings are kept visible for review. They include the same compact-layout and kit conventions noted above, action/copy heuristics, and missing social-sharing metadata. No medical claims or hospital affiliations are inferred from the references.
+
+## Logo palette update ? November 8, 2026
+
+The public site, patient and clinician workspaces, consultation chat, verification scanner, and light/dark themes now share the logo palette. The primary blue is #0759a6, secondary blue #006a9e, and cyan #25c9ed. Pale blue surfaces replace green fills; dark mode uses blue-tinted surfaces and lighter blue accents. Red errors and amber warnings remain distinct.
+
+Validation for the palette update: TypeScript and production build passed (existing large-bundle warning remains). A fresh headless Edge check failed to initialize its debugging connection, so the earlier screenshot results above do not verify this palette update. Protected pages were not visually checked.

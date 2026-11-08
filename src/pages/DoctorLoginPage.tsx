@@ -1,3 +1,4 @@
+import { BrandLogo } from '../components/BrandLogo';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -40,7 +41,7 @@ export function DoctorLoginPage() {
         </div>
       </aside>
       <main className="auth-card" id="main-content">
-        <span className="brand-mark" aria-hidden="true">+</span>
+        <BrandLogo />
         <p className="eyebrow">DOCTOR LOGIN</p>
         <h1>Doctor login</h1>
         <p className="muted">Log in with the email and password the clinic gave you.</p>
