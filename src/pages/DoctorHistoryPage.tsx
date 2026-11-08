@@ -53,12 +53,13 @@ export function DoctorHistoryPage() {
   }, [getToken, q, outcome, mine]);
 
   return (
-    <div className="doctor">
-      <div className="doctor-header">
+    <div className="page page-wide">
+      <div className="page-head">
         <div>
+          <span className="eyebrow">Advice sent and meetings scheduled · newest first</span>
           <h1>History</h1>
-          <p className="muted">Cases taken off the queue, newest first.</p>
         </div>
+        {result && <span className="on-duty"><span className="dot" aria-hidden="true" />{result.cases.length}{result.more ? '+' : ''} cases</span>}
       </div>
 
       <form className="card history-search" role="search" onSubmit={(e) => { e.preventDefault(); update({ q: text.trim() }); }}>
@@ -84,31 +85,34 @@ export function DoctorHistoryPage() {
       {error && <p className="error">{error}</p>}
       {!result && !error && <p className="muted">Loading…</p>}
       {result && result.cases.length === 0 && (
-        <div className="card"><p>{q || outcome !== 'all' || mine ? 'No past cases match.' : 'No cases have been closed yet.'}</p></div>
+        <div className="empty">{q || outcome !== 'all' || mine ? 'No past cases match.' : 'No cases have been closed yet.'}</div>
       )}
 
       {result && result.cases.length > 0 && (
-        <ul className="queue">
+        <div className="queue-list">
           {result.cases.map((c) => (
-            <li key={c.visitId}>
-              <Link to={`/doctor/history/${c.visitId}${params.size ? `?from=${encodeURIComponent(`?${params}`)}` : ''}`} className="queue-item">
-                <span className={c.status === 'resolved' ? 'pill pill-advice' : c.status === 'appointment_booked' ? 'pill pill-booked' : 'pill'}>
-                  {OUTCOME_LABELS[c.status]}
-                </span>
-                <span className="queue-main">
-                  <strong>{c.complaint}</strong>
-                  <span className="muted">
-                    {c.diagnosis ? `Diagnosis: ${c.diagnosis}` : 'No diagnosis yet'}
-                    {` · Patient ${c.patientId}`}
-                    {c.ctas && ` · CTAS ${c.ctas} (${CTAS_LABELS[c.ctas]})`}
-                    {c.doctorName && ` · ${c.doctorName}`}
-                  </span>
-                </span>
-                <span className="queue-item-date">{formatTime(c.closedAt)}</span>
-              </Link>
-            </li>
+            <Link key={c.visitId} to={`/doctor/history/${c.visitId}${params.size ? `?from=${encodeURIComponent(`?${params}`)}` : ''}`} className="qcard">
+              <div className="qcard-head">
+                <div className="grow">
+                  <div className="qcard-title">{c.complaint}</div>
+                  <div className="qcard-meta">
+                    <span>Patient {c.patientId}</span>
+                    <span>Case #{c.visitId}</span>
+                    {c.doctorName && <span>{c.doctorName}</span>}
+                  </div>
+                </div>
+                <div className="qcard-side">
+                  <span className={c.status === 'resolved' ? 'chip chip-low' : 'chip chip-medium'}>{OUTCOME_LABELS[c.status]}</span>
+                  {c.ctas && <span className="chip plain" title={CTAS_LABELS[c.ctas]}>CTAS {c.ctas}</span>}
+                </div>
+              </div>
+              <div className="qcard-foot">
+                <span>{c.diagnosis ? `Diagnosis: ${c.diagnosis}` : 'No diagnosis yet'}</span>
+                <span className="row"><span className="mono faint">{formatTime(c.closedAt)}</span><span className="accent">Open →</span></span>
+              </div>
+            </Link>
           ))}
-        </ul>
+        </div>
       )}
       {result?.more && <p className="muted small">Showing the newest 100. Search to narrow it down.</p>}
     </div>

@@ -5,6 +5,8 @@ import { AuthProvider } from './auth/AuthContext';
 import App from './App';
 import { applySavedSettings } from './pages/SettingsPage';
 import './styles.css';
+import './workspace.css';
+import './chat.css';
 
 applySavedSettings();
 

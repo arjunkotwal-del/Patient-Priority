@@ -56,7 +56,7 @@ export function computePriority(input: PriorityInput): { priority: Priority; rea
   const labels = new Set(patientText.flatMap((text) => scanKeywords(text, HIGH_PRIORITY_KEYWORDS)).map((h) => h.label));
   for (const label of labels) raise('high', `Keyword: ${label}`);
 
-  const pain = painScore(input.transcript);
+  const pain = painScore([...input.premadeAnswers, ...input.transcript]);
   if (pain !== null && pain >= 7) raise('high', `Pain ${pain}/10`);
   else if (pain !== null && pain >= 4) raise('medium', `Pain ${pain}/10`);
 

@@ -17,7 +17,7 @@ export function LoginPage() {
     <div className="auth-page login-page">
       <a className="skip-link" href="#main-content">Skip to content</a>
       <Link to="/" className="auth-back">← Back to Patient Priority</Link>
-      <aside className="auth-intro"><p className="eyebrow">PATIENT PRIORITY</p><h2>Your care.<br />One place to begin.</h2><p>Log in to your patient account, or create one to get started.</p><div className="auth-help"><strong>First visit?</strong><p>Patients will need their Ontario health card for verification after creating an account.</p></div></aside>
+      <aside className="auth-intro"><p className="eyebrow">PATIENT PRIORITY</p><h2>Your care.<br />One place to begin.</h2><p>Start a visit with your patient account, or create one to get started.</p><div className="auth-help"><strong>First visit?</strong><p>Patients will need their Ontario health card for verification after creating an account.</p></div></aside>
       <main className="auth-card" id="main-content">
         <span className="brand-mark" aria-hidden="true">+</span>
         <p className="eyebrow">ACCOUNT ACCESS</p>

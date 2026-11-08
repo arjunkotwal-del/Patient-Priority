@@ -203,7 +203,7 @@ export function VerifyPage() {
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.message ?? `Server error (${res.status})`);
       setVerification(body as Verification);
-      navigate('/medical', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed.');
     } finally {

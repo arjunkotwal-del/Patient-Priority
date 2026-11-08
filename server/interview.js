@@ -59,15 +59,16 @@ export function parseAiQuestion(raw) {
     return null;
   }
   if (typeof ai?.escalate !== 'boolean' || typeof ai?.done !== 'boolean') return null;
-  if (ai.escalate) return { ...emptyResult(), escalate: true, escalateReason: String(ai.escalateReason ?? '') };
-  if (ai.done) return { ...emptyResult(), done: true };
-
+  const flag = { escalate: ai.escalate, escalateReason: ai.escalate ? String(ai.escalateReason ?? '') : '' };
   const question = typeof ai.question === 'string' ? ai.question.trim() : '';
+  // A red flag never ends the chat by itself: with no next question, the interview is just done.
+  if (ai.done || (ai.escalate && !question)) return { ...emptyResult(), ...flag, done: true };
+
   if (!question || !Array.isArray(ai.options)) return null;
   const options = ai.options.filter((o) => typeof o === 'string' && o.trim()).map((o) => o.trim()).slice(0, 4);
   // A single option isn't a choice, so make it a typed answer instead.
   const usable = options.length >= 2 ? options : [];
-  return { ...emptyResult(), question, options: usable, allowOther: usable.length === 0 || ai.allowOther === true };
+  return { ...emptyResult(), ...flag, question, options: usable, allowOther: usable.length === 0 || ai.allowOther === true };
 }
 
 export function conversationText({ complaint, transcript }, finalTurn = false) {
@@ -122,15 +123,13 @@ export function scanInterview({ complaint, premadeAnswers, transcript }) {
   return [...new Set(patientText.flatMap((text) => scanForRedFlags(text)).map((hit) => hit.label))];
 }
 
-/** Runs one interview turn. escalateReason is for staff and must never reach the patient. */
+/**
+ * Runs one interview turn. Red flags never stop the chat: the AI keeps asking so the doctor gets
+ * the full picture, and the summary flags the case (see summary.js). escalate and escalateReason
+ * only note what the AI noticed; they are for staff and must never reach the patient.
+ */
 export async function runInterviewTurn(input) {
   const { complaint, premadeAnswers, transcript, history = null } = input;
-
-  // The scanner runs first, so a scary message never depends on the AI.
-  const hits = scanInterview(input);
-  if (hits.length > 0) {
-    return { ...emptyResult(), escalate: true, escalateReason: `Red flag scanner: ${hits.join(', ')}` };
-  }
 
   const finalTurn = transcript.length >= MAX_QUESTIONS;
   const systemPrompt = buildInterviewPrompt({
@@ -149,9 +148,8 @@ export async function runInterviewTurn(input) {
     ai = (await askGemini(systemPrompt, nudge, RESPONSE_SCHEMA, parseAiQuestion)) ?? ai;
   }
 
-  // Without the AI nobody is checking for red flags, so a person has to take over.
-  if (!ai) return { ...emptyResult(), escalate: true, escalateReason: 'Interview unavailable: AI did not respond' };
-  if (ai.escalate) return { ...ai, escalateReason: ai.escalateReason || 'AI escalated without a reason' };
-  if (finalTurn) return { ...emptyResult(), done: true };
+  // Without the AI the interview can't go on: end it, and the summary flags the case for the doctor.
+  if (!ai) return { ...emptyResult(), done: true, escalateReason: 'Interview unavailable: AI did not respond' };
+  if (finalTurn) return { ...emptyResult(), done: true, escalate: ai.escalate, escalateReason: ai.escalateReason };
   return ai;
 }

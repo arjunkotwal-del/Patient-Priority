@@ -1,26 +1,37 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { PatientVisitsProvider, usePatientVisits } from './PatientVisitsContext';
+import { WorkspaceShell } from './WorkspaceShell';
 
+/** The patient portal: the shared workspace shell (sidebar, top bar, footer) around each page. */
 export function AppLayout() {
-  const { user, logout } = useAuth();
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="skip-link" href="#main-content">Skip to content</a>
-        <NavLink to="/medical" className="brand"><span className="brand-mark" aria-hidden="true">+</span>Patient Priority</NavLink>
-        <nav aria-label="Patient navigation">
-          <NavLink to="/medical">Medical</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
-          <NavLink to="/account">Account</NavLink>
-        </nav>
-        <div className="topbar-user">
-          <span>{user?.name}</span>
-          <button className="btn btn-ghost" onClick={logout}>Log out</button>
-        </div>
-      </header>
-      <main className="content" id="main-content">
-        <Outlet />
-      </main>
-    </div>
+    <PatientVisitsProvider>
+      <PatientShell />
+    </PatientVisitsProvider>
+  );
+}
+
+function PatientShell() {
+  const { user, logout } = useAuth();
+  const { unreadTotal } = usePatientVisits();
+  const name = user?.name ?? user?.email ?? 'Patient';
+  return (
+    <WorkspaceShell
+      role="patient"
+      name={name}
+      email={user?.email}
+      logout={logout}
+      items={[
+        { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', end: true },
+        { to: '/visits', label: 'Start a visit', icon: 'plus', end: true },
+        { to: '/history', label: 'My visits', icon: 'chat' },
+        { to: '/notifications', label: 'Notifications', icon: 'bell', count: unreadTotal },
+        { to: '/account', label: 'My account', icon: 'account' },
+        { to: '/settings', label: 'Settings', icon: 'settings' },
+      ]}
+    >
+      <Outlet />
+    </WorkspaceShell>
   );
 }

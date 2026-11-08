@@ -1,30 +1,23 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { WorkspaceShell } from './WorkspaceShell';
 
-/** The clinician workspace. Doctors never see the patient app's layout or pages. */
+/** The clinician workspace. Doctors never see the patient portal. */
 export function DoctorLayout() {
   const { doctor, user, logout } = useAuth();
   return (
-    <div className="clinic">
-      <a className="skip-link" href="#main-content">Skip to content</a>
-      <aside className="clinic-nav">
-        <div className="clinic-brand">
-          <span className="brand"><span className="brand-mark" aria-hidden="true">+</span>Patient Priority</span>
-          <span className="clinic-tag">Clinician</span>
-        </div>
-        <nav aria-label="Clinical navigation">
-          <NavLink to="/doctor" end>Priority queue</NavLink>
-          <NavLink to="/doctor/history">History</NavLink>
-        </nav>
-        <div className="clinic-user">
-          <strong>{doctor?.name}</strong>
-          <span>{user?.email}</span>
-          <button className="btn btn-ghost" onClick={logout}>Log out</button>
-        </div>
-      </aside>
-      <main className="clinic-main" id="main-content">
-        <Outlet />
-      </main>
-    </div>
+    <WorkspaceShell
+      role="doctor"
+      name={doctor?.name ?? user?.name ?? 'Clinician'}
+      email={user?.email}
+      logout={logout}
+      items={[
+        { to: '/doctor', label: 'Priority queue', icon: 'dashboard', end: true },
+        { to: '/doctor/history', label: 'History', icon: 'history' },
+        { to: '/doctor/settings', label: 'Settings', icon: 'settings' },
+      ]}
+    >
+      <Outlet />
+    </WorkspaceShell>
   );
 }

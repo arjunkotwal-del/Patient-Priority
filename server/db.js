@@ -199,11 +199,14 @@ export async function loadPatientHistory(patientId) {
 }
 
 /** Saves the AI summary and moves the case to the doctor queue, or marks it escalated. */
-export async function saveTriage(visitId, { escalate, redFlags, suggestedCtas, soap, priority = null, priorityReasons = [], painScore = null }) {
+/** Hands a finished interview to the doctors. Flagged cases go too: red flags only raise priority. */
+export async function saveTriage(visitId, { redFlags, suggestedCtas, soap, priority = null, priorityReasons = [], painScore = null }) {
+  const hasSummary = soap && Object.values(soap).some((part) => part);
   await requirePool().query(
-    `UPDATE past_visits SET status = $2, red_flags = $3, suggested_ctas = $4, soap = $5, priority = $6, priority_reasons = $7, pain_score = $8
+    `UPDATE past_visits SET status = 'waiting_for_doctor', red_flags = $2, suggested_ctas = $3, soap = $4, priority = $5, priority_reasons = $6,
+            pain_score = $7
      WHERE id = $1`,
-    [visitId, escalate ? 'escalated' : 'waiting_for_doctor', redFlags, suggestedCtas, escalate ? null : soap, priority, priorityReasons, painScore],
+    [visitId, redFlags, suggestedCtas, hasSummary ? soap : null, priority, priorityReasons, painScore],
   );
 }
 
@@ -421,15 +424,16 @@ export async function claimVisit(visitId, doctorId) {
 
 /**
  * Cases waiting for the doctor's answer, worst first:
- *   1. priority: high, medium, low (keyword rules plus the AI's rating, see lib/priority.ts)
- *   2. CTAS: lower is more urgent (unrated last)
- *   3. pain score: higher first (none given last)
- *   4. wait: longest first
+ *   1. red flags: flagged cases first
+ *   2. priority: high, medium, low (keyword rules plus the AI's rating, see lib/priority.ts)
+ *   3. CTAS: lower is more urgent (unrated last)
+ *   4. pain score: higher first (none given last)
+ *   5. wait: longest first
  * The reasons go to the doctor so they can see why a case is at the front.
  */
 export async function getQueue() {
   const { rows } = await requirePool().query(
-    `SELECT v.id, v.patient_id, v.complaint, v.status, v.suggested_ctas, v.priority, v.priority_reasons, v.pain_score, v.started_at,
+    `SELECT v.id, v.patient_id, v.complaint, v.status, v.suggested_ctas, v.priority, v.priority_reasons, v.red_flags, v.pain_score, v.started_at,
             floor(extract(epoch FROM now() - v.started_at) / 60)::int AS waiting_minutes,
             v.assigned_doctor_id, d.name AS assigned_doctor_name,
             (SELECT count(*)::int FROM visit_messages m
@@ -437,7 +441,8 @@ export async function getQueue() {
                AND (v.doctor_read_at IS NULL OR m.sent_at > v.doctor_read_at)) AS unread_for_doctor
      FROM past_visits v LEFT JOIN doctors d ON d.id = v.assigned_doctor_id
      WHERE v.status = 'waiting_for_doctor'
-     ORDER BY CASE v.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 2 END,
+     ORDER BY cardinality(v.red_flags) = 0,
+              CASE v.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 2 END,
               v.suggested_ctas ASC NULLS LAST,
               v.pain_score DESC NULLS LAST,
               v.started_at ASC, v.id ASC`,
@@ -450,6 +455,7 @@ export async function getQueue() {
     suggestedCtas: r.suggested_ctas,
     priority: r.priority ?? 'medium',
     priorityReasons: r.priority_reasons,
+    redFlags: r.red_flags ?? [],
     painScore: r.pain_score,
     startedAt: iso(r.started_at),
     waitingMinutes: r.waiting_minutes,
@@ -495,6 +501,8 @@ export function toPatientView(visit, unreadCount = 0) {
     doctorName: visit.doctor?.name ?? visit.assignedDoctor?.name ?? null,
     diagnosis: visit.diagnosis,
     plan: visit.plan,
+    // The patient's own check-in answers, so their chat shows the whole conversation.
+    premadeAnswers: visit.premadeAnswers ?? [],
     messages: visit.messages,
     prescriptions: visit.prescriptions,
     orders: visit.orders,

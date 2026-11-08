@@ -17,7 +17,7 @@ export function DoctorHistoryCasePage() {
   const [error, setError] = useState<string | null>(null);
   const path = `/doctor/visits/${encodeURIComponent(id)}`;
   // Back to the list with the same search, if we came from one.
-  const back = <Link to={`/doctor/history${new URLSearchParams(search).get('from') ?? ''}`}>← History</Link>;
+  const back = <Link to={`/doctor/history${new URLSearchParams(search).get('from') ?? ''}`} className="back">← History</Link>;
 
   const load = useCallback(async () => {
     try {
@@ -47,8 +47,8 @@ export function DoctorHistoryCasePage() {
     [getToken, path, load],
   );
 
-  if (error && !detail) return <div className="doctor">{back}<p className="error">{error}</p></div>;
-  if (!detail) return <p className="muted">Loading…</p>;
+  if (error && !detail) return <div className="page">{back}<p className="error">{error}</p></div>;
+  if (!detail) return <div className="page"><p className="muted">Loading…</p></div>;
 
   const { visit, history } = detail;
   const status = visit.status as HistoryItem['status'];
@@ -57,23 +57,22 @@ export function DoctorHistoryCasePage() {
   const intake = visit.messages.filter((m) => m.from !== 'doctor');
 
   return (
-    <div className="doctor">
+    <div className="page page-wide">
       {back}
 
-      <div className="doctor-header">
+      <div className="work-head">
         <div>
-          <h1>{visit.complaint}</h1>
-          <p className="muted">
-            Patient {visit.patientId} · checked in {time(visit.startedAt)}
+          <span className="eyebrow">
+            Case #{visit.id} · Patient {visit.patientId} · checked in {time(visit.startedAt)}
             {visit.resolvedAt && ` · closed ${time(visit.resolvedAt)}`}
-          </p>
-        </div>
-        <div className="case-badges">
-          <span className={status === 'resolved' ? 'pill pill-advice' : status === 'appointment_booked' ? 'pill pill-booked' : 'pill'}>
-            {OUTCOME_LABELS[status] ?? status.replaceAll('_', ' ')}
           </span>
-          {visit.priority && <span className={`priority priority-${visit.priority}`}>{PRIORITY_LABELS[visit.priority]}</span>}
-          <span className={`ctas ctas-${ctas ?? 'none'}`}>{ctas ? `CTAS ${ctas} · ${CTAS_LABELS[ctas]}` : 'Not triaged'}</span>
+          <h1>{visit.complaint}</h1>
+        </div>
+        <div className="row">
+          <span className={status === 'resolved' ? 'chip chip-low' : 'chip chip-medium'}>{OUTCOME_LABELS[status] ?? status.replaceAll('_', ' ')}</span>
+          {visit.priority && <span className={`chip chip-${visit.priority}`}>{PRIORITY_LABELS[visit.priority]}</span>}
+          <span className="chip plain">{ctas ? `CTAS ${ctas} · ${CTAS_LABELS[ctas]}` : 'Not triaged'}</span>
+          <Link to={`/doctor/visits/${visit.id}`} className="btn btn-secondary">Full case: notes →</Link>
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { subscribeToUpdates } from '../lib/live';
 import { CTAS_LABELS, PRIORITY_LABELS, callApi, formatTime as time, type DoctorVisitDetail, type QueueItem } from './doctorApi';
@@ -14,6 +15,7 @@ export type Act = (action: string, body?: object) => Promise<string | null>;
  * The case at the front of the queue, in full, with the doctor's two choices:
  * give advice (one reply that closes the case) or schedule an in-person meeting.
  * Either one takes the case off the queue; `onDone` then reloads the queue.
+ * Notes, claiming and escalating are on the full case page (DoctorVisitPage).
  */
 export function DoctorCase({ item, onDone }: { item: QueueItem; onDone: () => Promise<void> }) {
   const { visitId } = item;
@@ -66,111 +68,116 @@ export function DoctorCase({ item, onDone }: { item: QueueItem; onDone: () => Pr
   const ctas = visit.suggestedCtas;
 
   return (
-    <article className="doctor" aria-labelledby="case-title">
-      <div className="doctor-header">
+    <article className="stack" aria-labelledby="case-title">
+      <div className="work-head">
         <div>
-          <p className="eyebrow">FRONT OF THE QUEUE</p>
-          <h2 id="case-title" className="case-title">{visit.complaint}</h2>
-          <p className="muted">
-            Patient {visit.patientId} · checked in {time(visit.startedAt)}
+          <span className="eyebrow">
+            Front of the queue · Case #{visit.id} · Patient {visit.patientId} · checked in {time(visit.startedAt)}
             {item.painScore != null && ` · pain ${item.painScore}/10`}
-          </p>
+          </span>
+          <h2 id="case-title" className="case-title">{visit.complaint}</h2>
         </div>
-        <div className="case-badges">
-          <span className={`priority priority-${item.priority}`}>{PRIORITY_LABELS[item.priority]}</span>
-          <span className={`ctas ctas-${ctas ?? 'none'}`}>{ctas ? `CTAS ${ctas} · ${CTAS_LABELS[ctas]}` : 'Not triaged'}</span>
+        <div className="row">
+          {item.redFlags.length > 0 && <span className="chip chip-danger">Red flag</span>}
+          <span className={`chip chip-${item.priority}`}>{PRIORITY_LABELS[item.priority]}</span>
+          <span className="chip plain">{ctas ? `CTAS ${ctas} · ${CTAS_LABELS[ctas]}` : 'Not triaged'}</span>
+          <Link to={`/doctor/visits/${visit.id}`} className="btn btn-secondary">Full case: notes, escalate →</Link>
         </div>
       </div>
-
-      {item.priorityReasons.length > 0 && (
-        <section className="card">
-          <h3>Why this case is first</h3>
-          <ul>{item.priorityReasons.map((r) => <li key={r}>{r}</li>)}</ul>
-        </section>
-      )}
 
       {visit.redFlags.length > 0 && (
         <div className="card alert">
           <h3>Red flags</h3>
           <ul>{visit.redFlags.map((f) => <li key={f}>{f}</li>)}</ul>
+          <p className="small">If this needs the triage desk, open the full case and escalate it.</p>
         </div>
       )}
 
-      <div className="doctor-grid">
-        <div className="doctor-main">
-          {visit.soap && (
-            <section className="card">
-              <h2>AI intake summary</h2>
-              <p className="muted small">Written by the intake assistant for doctor review. Not a diagnosis.</p>
-              <dl className="qa">
-                <div><dt>Subjective</dt><dd>{visit.soap.subjective}</dd></div>
-                <div><dt>Assessment</dt><dd>{visit.soap.assessment}</dd></div>
-                <div><dt>Plan</dt><dd>{visit.soap.plan}</dd></div>
-              </dl>
-            </section>
-          )}
+      {item.priorityReasons.length > 0 && (
+        <section className="card">
+          <div className="card-head"><h3>Why this case is first</h3></div>
+          <div className="reasons">{item.priorityReasons.map((r) => <span key={r} className="reason">{r}</span>)}</div>
+        </section>
+      )}
 
-          <section className="card">
-            <h2>Symptoms reported at check-in</h2>
-            {visit.premadeAnswers.length > 0 ? (
-              <dl className="qa">
-                {visit.premadeAnswers.map((qa, i) => <div key={i}><dt>{qa.question}</dt><dd>{qa.answer}</dd></div>)}
-              </dl>
-            ) : (
-              <p className="muted">No check-in answers recorded.</p>
-            )}
-            {visit.messages.length > 0 && (
-              <details>
-                <summary>Full intake conversation ({visit.messages.length} messages)</summary>
-                <ol className="chat">
-                  {visit.messages.map((m, i) => (
-                    <li key={i} className={`chat-msg from-${m.from}`}>
-                      <span className="chat-meta">{SENDER_LABELS[m.from]} · {time(m.sentAt)}</span>
-                      <span>{m.text}</span>
-                    </li>
-                  ))}
-                </ol>
-              </details>
-            )}
-          </section>
-
-          <section className="card actions">
-            <h2>Your response</h2>
-            <div className="tabs" role="tablist">
-              <button role="tab" aria-selected={action === 'advice'} className={action === 'advice' ? 'tab active' : 'tab'} onClick={() => setAction('advice')}>
-                Give advice
-              </button>
-              <button role="tab" aria-selected={action === 'meeting'} className={action === 'meeting' ? 'tab active' : 'tab'} onClick={() => setAction('meeting')}>
-                Schedule a meeting
-              </button>
-            </div>
-            {action === 'advice' ? <AdviceForm act={act} suggestedCtas={visit.suggestedCtas} /> : <MeetingForm act={act} />}
-          </section>
-        </div>
-
-        <aside className="doctor-side">
-          <section className="card">
-            <h2>Patient</h2>
+      <div className="quads">
+        <section className="card quad">
+          <div className="quad-head"><h2>AI intake summary</h2><span className="eyebrow">For review</span></div>
+          {visit.soap ? (
             <dl className="qa">
-              <div><dt>Allergies</dt><dd>{list(history?.allergies)}</dd></div>
-              <div><dt>Current medications</dt><dd>{list(history?.currentMeds)}</dd></div>
-              <div><dt>Conditions</dt><dd>{list(history?.conditions)}</dd></div>
+              <div><dt>Subjective</dt><dd>{visit.soap.subjective}</dd></div>
+              <div><dt>Assessment</dt><dd>{visit.soap.assessment}</dd></div>
+              <div><dt>Plan</dt><dd>{visit.soap.plan}</dd></div>
             </dl>
-          </section>
+          ) : (
+            <p className="muted">No AI summary. Read the conversation below.</p>
+          )}
+          <p className="small faint">Written by the intake assistant. Not a diagnosis.</p>
+        </section>
 
-          <section className="card">
-            <h2>Past visits</h2>
-            {!history?.pastVisits.length && <p className="muted">None on file.</p>}
-            {history?.pastVisits.map((v, i) => (
-              <div key={i} className="past-visit">
-                <strong>{v.date}: {v.complaint}</strong>
-                {v.diagnosis && <span>Diagnosis: {v.diagnosis}</span>}
-                {v.prescriptions?.length ? <span>Prescribed: {v.prescriptions.join(', ')}</span> : null}
-                {v.plan && <span className="muted">{v.plan}</span>}
-              </div>
-            ))}
-          </section>
-        </aside>
+        <section className="card quad">
+          <div className="quad-head"><h2>Patient history</h2><span className="eyebrow">On file</span></div>
+          <dl className="qa">
+            <div><dt>Allergies</dt><dd>{list(history?.allergies)}</dd></div>
+            <div><dt>Current medications</dt><dd>{list(history?.currentMeds)}</dd></div>
+            <div><dt>Conditions</dt><dd>{list(history?.conditions)}</dd></div>
+          </dl>
+          <span className="eyebrow">Past visits</span>
+          {!history?.pastVisits.length && <p className="muted small">None on file.</p>}
+          {history?.pastVisits.map((v, i) => (
+            <div key={i} className="entry">
+              <strong>{v.complaint}</strong>
+              <span className="mono">{v.date}</span>
+              {v.diagnosis && <span>Diagnosis: {v.diagnosis}</span>}
+              {v.prescriptions?.length ? <span>Prescribed: {v.prescriptions.join(', ')}</span> : null}
+              {v.plan && <span className="muted">{v.plan}</span>}
+            </div>
+          ))}
+        </section>
+
+        <section className="card quad quad-wide">
+          <div className="quad-head"><h2>Symptoms reported at check-in</h2><span className="mono faint">{visit.messages.length} messages</span></div>
+          {visit.premadeAnswers.length > 0 ? (
+            <dl className="qa">
+              {visit.premadeAnswers.map((qa, i) => <div key={i}><dt>{qa.question}</dt><dd>{qa.answer}</dd></div>)}
+            </dl>
+          ) : (
+            <p className="muted">No check-in answers recorded.</p>
+          )}
+          {visit.messages.length > 0 && (
+            <details>
+              <summary>Full intake conversation</summary>
+              <ol className="chat-panel">
+                {visit.messages.map((m, i) => (
+                  <li key={i} className={`msg msg-${m.from}`}>
+                    <span className="msg-icon" aria-hidden="true">{m.from === 'patient' ? 'Pt' : m.from === 'doctor' ? 'Dr' : '+'}</span>
+                    <div className="msg-main">
+                      <div className="msg-head">
+                        <strong>{SENDER_LABELS[m.from]}</strong>
+                        {m.from === 'ai' && <span className="msg-tag">AI</span>}
+                        <span className="msg-time">{time(m.sentAt)}</span>
+                      </div>
+                      <div className="msg-body">{m.text}</div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+        </section>
+
+        <section className="card actions quad-wide">
+          <div className="card-head"><h2>Your response</h2></div>
+          <div className="tabs" role="tablist">
+            <button role="tab" aria-selected={action === 'advice'} className={action === 'advice' ? 'tab active' : 'tab'} onClick={() => setAction('advice')}>
+              Give advice
+            </button>
+            <button role="tab" aria-selected={action === 'meeting'} className={action === 'meeting' ? 'tab active' : 'tab'} onClick={() => setAction('meeting')}>
+              Schedule a meeting
+            </button>
+          </div>
+          {action === 'advice' ? <AdviceForm act={act} suggestedCtas={visit.suggestedCtas} /> : <MeetingForm act={act} />}
+        </section>
       </div>
     </article>
   );
@@ -246,7 +253,7 @@ export function AdviceForm({ act, suggestedCtas }: { act: Act; suggestedCtas: nu
           </select>
         </label>
       </div>
-      <p className="muted small">More urgent than CTAS 4? Schedule a meeting instead.</p>
+      <p className="muted small">More urgent than CTAS 4? Schedule a meeting, or escalate from the full case.</p>
       {changed && (
         <label>
           Why are you changing the CTAS level?

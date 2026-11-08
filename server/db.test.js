@@ -41,6 +41,11 @@ describe('toPatientView', () => {
     assert.equal(view.plan, 'Rest');
     assert.equal(view.unreadCount, 2);
   });
+  it("includes the patient's own check-in answers", () => {
+    const premadeAnswers = [{ question: 'When did it start?', answer: 'Today' }];
+    assert.deepEqual(toPatientView({ ...visit, premadeAnswers }).premadeAnswers, premadeAnswers);
+    assert.deepEqual(toPatientView(visit).premadeAnswers, []);
+  });
   it('drops everything for staff only', () => {
     const text = JSON.stringify(toPatientView(visit));
     for (const hidden of ['SECRET-SOAP', 'Something scary', 'Clinical summary', 'Looked worse', 'suggestedCtas', 'confirmedCtas', 'patientId']) {

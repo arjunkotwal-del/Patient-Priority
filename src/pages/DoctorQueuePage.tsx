@@ -8,7 +8,7 @@ import { CTAS_LABELS, PRIORITY_LABELS, callApi, formatWait, type QueueItem } fro
 const REFRESH_MS = 60_000;
 
 /**
- * The doctor's only page: the queue, worst first (priority, then CTAS, then pain, then wait;
+ * The priority queue, worst first (red flags, then priority, CTAS, pain and wait;
  * the server sorts it, see getQueue in server/db.js).
  * The case at the front is opened in full so the doctor can give advice or schedule a
  * meeting. The rest are shown below in order and can't be skipped to.
@@ -42,45 +42,65 @@ export function DoctorQueuePage() {
   // A case another doctor is handling stays in line but is skipped here.
   const current = queue?.find((q) => !q.assignedDoctor || q.assignedDoctor.id === doctor?.id) ?? null;
   const upNext = (queue ?? []).filter((q) => q !== current);
+  const high = (queue ?? []).filter((q) => q.priority === 'high').length;
 
   return (
-    <div className="doctor">
-      <div className="doctor-header">
+    <div className="page page-wide">
+      <div className="page-head">
         <div>
-          <h1>Patient queue</h1>
-          <p className="muted">
-            {queue ? `${queue.length} waiting · ` : ''}Worst first: priority, then CTAS, then pain, then longest wait. Updates live.
-          </p>
+          <span className="eyebrow">Red flags first, then priority, CTAS, pain and wait · AI rated, rules can only raise it</span>
+          <h1>Priority queue</h1>
+        </div>
+        <div className="row">
+          {queue && <span className="on-duty"><span className="dot" aria-hidden="true" />{queue.length} waiting · {high} high</span>}
+          <button className="btn btn-secondary" onClick={() => void load()}>Refresh</button>
         </div>
       </div>
 
       {error && <p className="error">{error}</p>}
       {queue === null && !error && <p className="muted">Loading…</p>}
-      {queue && queue.length === 0 && <div className="card"><p>No patients are waiting right now.</p></div>}
-      {queue && queue.length > 0 && !current && (
-        <div className="card"><p>Every waiting case is being handled by another doctor.</p></div>
-      )}
+      {queue && queue.length === 0 && <div className="empty">No patients are waiting right now.</div>}
+      {queue && queue.length > 0 && !current && <div className="empty">Every waiting case is being handled by another doctor.</div>}
 
       {current && <DoctorCase key={current.visitId} item={current} onDone={load} />}
 
       {upNext.length > 0 && (
-        <section aria-labelledby="up-next">
-          <h2 id="up-next">Up next</h2>
-          <ol className="queue">
+        <section aria-labelledby="up-next" className="stack">
+          <div className="queue-tools">
+            <h2 id="up-next">Up next</h2>
+            <span className="mono faint">In order · updates live</span>
+          </div>
+          <ol className="queue-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {upNext.map((item) => (
-              <li key={item.visitId} className="queue-item queue-item-static">
-                <span className={`priority priority-${item.priority}`}>{PRIORITY_LABELS[item.priority]}</span>
-                <span className={`ctas ctas-${item.suggestedCtas ?? 'none'}`} title={item.suggestedCtas ? CTAS_LABELS[item.suggestedCtas] : 'Not triaged'}>
-                  {item.suggestedCtas ? `CTAS ${item.suggestedCtas}` : 'CTAS ?'}
-                </span>
-                <span className="queue-main">
-                  <strong>{item.complaint}</strong>
-                  <span className="muted">
-                    Waiting {formatWait(item.waitingMinutes)}
-                    {item.painScore != null && ` · pain ${item.painScore}/10`}
-                    {item.assignedDoctor && ` · ${item.assignedDoctor.name} is handling this`}
-                  </span>
-                </span>
+              <li key={item.visitId} className={`qcard prio-${item.priority}${item.redFlags.length ? ' flagged' : ''}`}>
+                <div className="qcard-head">
+                  <div className="grow">
+                    <div className="qcard-title">{item.complaint}</div>
+                    <div className="qcard-meta">
+                      <span>Patient {item.patientId}</span>
+                      <span>Case #{item.visitId}</span>
+                      <span>Waiting {formatWait(item.waitingMinutes)}</span>
+                      {item.painScore != null && <span>Pain {item.painScore}/10</span>}
+                    </div>
+                  </div>
+                  <div className="qcard-side">
+                    {item.redFlags.length > 0 && <span className="chip chip-danger">Red flag</span>}
+                    <span className={`chip chip-${item.priority}`}>{PRIORITY_LABELS[item.priority]}</span>
+                    <span className="chip plain" title={item.suggestedCtas ? CTAS_LABELS[item.suggestedCtas] : 'Not triaged'}>
+                      {item.suggestedCtas ? `CTAS ${item.suggestedCtas} · AI` : 'CTAS ?'}
+                    </span>
+                  </div>
+                </div>
+                {item.priorityReasons.length > 0 && (
+                  <div className="reasons" title="Why this priority">
+                    {item.priorityReasons.map((r) => <span key={r} className="reason">{r}</span>)}
+                  </div>
+                )}
+                {item.assignedDoctor && (
+                  <div className="qcard-foot">
+                    <span><span className="dot dot-slate" aria-hidden="true" /> With {item.assignedDoctor.name}</span>
+                  </div>
+                )}
               </li>
             ))}
           </ol>

@@ -55,6 +55,17 @@ describe('parseAiQuestion', () => {
   it('rejects bad JSON', () => assert.equal(parseAiQuestion('nope'), null));
   it('rejects an empty question', () => assert.equal(parseAiQuestion(JSON.stringify({ ...question, question: '' })), null));
   it('caps options at 4', () => assert.equal(parseAiQuestion(JSON.stringify({ ...question, options: ['a', 'b', 'c', 'd', 'e'] })).options.length, 4));
+  it('keeps asking when the AI flags a red flag', () => {
+    const ai = parseAiQuestion(JSON.stringify({ ...question, escalate: true, escalateReason: 'Lip swelling' }));
+    assert.equal(ai.question, question.question);
+    assert.equal(ai.escalate, true);
+    assert.equal(ai.done, false);
+  });
+  it('treats a flag with no next question as done', () => {
+    const ai = parseAiQuestion(JSON.stringify({ ...question, question: '', escalate: true, escalateReason: 'not minor' }));
+    assert.equal(ai.done, true);
+    assert.equal(ai.escalateReason, 'not minor');
+  });
   it('turns one option into a typed answer', () => {
     const ai = parseAiQuestion(JSON.stringify({ ...question, options: ['a'], allowOther: false }));
     assert.deepEqual(ai.options, []);
@@ -88,29 +99,33 @@ describe('runInterviewTurn', () => {
     stub(question);
     assert.equal((await runInterviewTurn(input())).question, question.question);
   });
-  it('escalates on a scanner hit without calling Gemini', async () => {
+  it('keeps the interview going after a red flag', async () => {
     stub(question);
     const result = await runInterviewTurn(input({ transcript: [{ question: 'Anything else?', answer: 'I fainted' }] }));
-    assert.equal(result.escalate, true);
-    assert.equal(calls, 0);
+    assert.equal(result.question, question.question);
+    assert.equal(calls, 1);
   });
   it('retries once after a bad reply', async () => {
     stub('not json', question);
     assert.equal((await runInterviewTurn(input())).question, question.question);
     assert.equal(calls, 2);
   });
-  it('escalates if Gemini fails all 3 attempts', async () => {
+  it('ends the interview if Gemini fails all 3 attempts', async () => {
     stub(new Error('down'));
-    assert.equal((await runInterviewTurn(input())).escalate, true);
+    const result = await runInterviewTurn(input());
+    assert.equal(result.done, true);
+    assert.equal(result.escalate, false);
     assert.equal(calls, 3);
   });
-  it('stops at the question limit but still lets the AI escalate', async () => {
+  it('stops at the question limit and keeps the AI flag', async () => {
     const transcript = Array.from({ length: MAX_QUESTIONS }, () => ({ question: 'q', answer: 'a' }));
     stub(question);
     assert.equal((await runInterviewTurn(input({ transcript }))).done, true);
     calls = 0;
     stub({ ...question, question: '', escalate: true, escalateReason: 'not minor' });
-    assert.equal((await runInterviewTurn(input({ transcript }))).escalate, true);
+    const result = await runInterviewTurn(input({ transcript }));
+    assert.equal(result.done, true);
+    assert.equal(result.escalate, true);
   });
   const doneReply = { ...question, question: '', options: [], done: true };
   it('nudges an early "done" to check red flags first', async () => {

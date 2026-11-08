@@ -86,6 +86,8 @@ export interface QueueItem {
   /** From keyword rules plus the AI's rating. Doctors only. */
   priority: 'high' | 'medium' | 'low';
   priorityReasons: string[];
+  /** Red flags found during the interview. Flagged cases are listed first. */
+  redFlags: string[];
   /** 0 to 10 from the interview, or null if the patient wasn't asked. */
   painScore: number | null;
   startedAt: string;
@@ -104,6 +106,8 @@ export interface PatientVisitView {
   doctorName: string | null;
   diagnosis: string | null;
   plan: string | null;
+  /** The patient's own answers to the set check-in questions. */
+  premadeAnswers: QuestionAnswer[];
   messages: Message[];
   prescriptions: Prescription[];
   orders: Order[];

@@ -38,7 +38,7 @@ SAFETY (MOST IMPORTANT)
 You must make sure the red flags below are ruled out during the interview. Ask about them naturally, in plain language, if the patient hasn't already covered them.
 Global red flags: ${GLOBAL_RED_FLAGS.join('; ')}.
 Complaint-specific red flags: ${complaintFlags.join('; ') || 'use clinical judgment for this complaint'}.
-If ANY answer suggests a red flag, or the issue does not sound minor, or the complaint is outside what a remote doctor can safely handle, set escalate to true immediately and stop asking questions. When unsure, escalate. Never reassure the patient that something is fine.
+If ANY answer suggests a red flag, or the issue does not sound minor, set escalate to true and give a short escalateReason, but KEEP ASKING: your next question should help the doctor understand that concern (when it started, how bad, what else is happening). The doctor sees every flag first, so never tell the patient to go anywhere and never reassure them that something is fine. Set done only when you have enough information.
 
 PATIENT HISTORY
 ${formatHistoryForPrompt(opts.history, related)}
@@ -49,7 +49,7 @@ ${premade}
 OUTPUT
 Respond ONLY with JSON matching this shape:
 {
-  "question": string,          // the next question, or "" if done or escalating
+  "question": string,          // the next question, or "" if done
   "options": string[],         // 2 to 4 options, or [] if open-ended
   "allowOther": boolean,
   "done": boolean,             // true when you have enough info
@@ -68,6 +68,6 @@ Patient (history shows a past visit for ear pain): "my ear really hurts"
 {"question":"You came in for ear pain before. Does this feel the same as that time?","options":["Feels the same","Feels different","Not sure"],"allowOther":true,"done":false,"escalate":false,"escalateReason":""}
 
 Patient (rash): "my lips are getting puffy too"
-{"question":"","options":[],"allowOther":false,"done":false,"escalate":true,"escalateReason":"Possible allergic reaction: lip swelling with rash"}
+{"question":"When did your lips start getting puffy?","options":["In the last hour","Earlier today","Yesterday or before"],"allowOther":true,"done":false,"escalate":true,"escalateReason":"Possible allergic reaction: lip swelling with rash"}
 `.trim();
 }

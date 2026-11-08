@@ -39,29 +39,20 @@ export function parseMessageText(body) {
   return text && text.length <= MAX_TEXT ? text : null;
 }
 
-const escalated = (visitId) => ({ visitId, status: 'escalated', patientMessage: TRIAGE_MESSAGE });
-
 /** Asks the AI for the next step and saves it. Ends the interview with a summary when done. */
 async function advanceInterview(visit) {
   const history = await db.loadPatientHistory(visit.patientId);
   const input = { complaint: visit.complaint, premadeAnswers: visit.premadeAnswers, transcript: buildTranscript(visit.messages), history };
 
+  // Red flags never stop the chat: the AI keeps asking, and the summary flags the case.
   const turn = await runInterviewTurn(input);
-  if (turn.escalate) {
-    await db.escalateVisit(visit.id, [turn.escalateReason]);
-    return escalated(visit.id);
-  }
   if (!turn.done) {
     await db.addMessage(visit.id, { from: 'ai', kind: 'question', text: turn.question, options: turn.options });
     return { visitId: visit.id, status: 'interviewing', question: { text: turn.question, options: turn.options, allowOther: turn.allowOther } };
   }
 
-  // Interview finished: the summary decides between the doctor queue and the triage desk.
+  // Interview finished: every case goes to the doctor. Red flags put it at the top of the queue.
   const triage = await runSummary(input);
-  if (triage.escalate) {
-    await db.escalateVisit(visit.id, triage.redFlags);
-    return escalated(visit.id);
-  }
   await db.saveTriage(visit.id, triage);
   return { visitId: visit.id, status: 'waiting_for_doctor', patientMessage: WAITING_MESSAGE };
 }
@@ -81,10 +72,9 @@ export function parseSlotId(body) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-/** Tells doctors when an interview ends: a new case in the queue, or one sent to triage. */
+/** Tells doctors when an interview ends: there is a new case in the queue. */
 async function announceInterviewEnd(result) {
   if (result.status === 'waiting_for_doctor') await notifyVisit(result.visitId, 'new_case', 'doctors');
-  else if (result.status === 'escalated') await notifyVisit(result.visitId, 'status_changed', 'doctors');
 }
 
 const route = (fn) => async (req, res, next) => {

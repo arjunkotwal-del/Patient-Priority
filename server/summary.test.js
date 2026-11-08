@@ -47,7 +47,7 @@ describe('runSummary', () => {
   it('returns the SOAP note for a minor case', async () => {
     stub(minor);
     assert.deepEqual(await runSummary(input), {
-      escalate: false, redFlags: [], suggestedCtas: 5, priority: 'low', priorityReasons: ['AI rated low: Mild'], painScore: null, soap,
+      flagged: false, redFlags: [], suggestedCtas: 5, priority: 'low', priorityReasons: ['AI rated low: Mild'], painScore: null, soap,
     });
   });
   it('keeps the pain score for the queue order', async () => {
@@ -61,16 +61,29 @@ describe('runSummary', () => {
     assert.equal(result.priority, 'high');
     assert.ok(result.priorityReasons.includes('Keyword: Getting worse'));
   });
-  it('lets the rules win without calling Gemini', async () => {
+  it('flags a scanner red flag but still writes the summary', async () => {
     stub(minor);
     const result = await runSummary({ ...input, transcript: [{ question: 'Anything else?', answer: 'I have a stiff neck' }] });
-    assert.equal(result.escalate, true);
+    assert.equal(result.flagged, true);
     assert.deepEqual(result.redFlags, ['Stiff neck']);
-    assert.equal(calls, 0);
+    assert.equal(result.priority, 'high');
+    assert.equal(result.priorityReasons[0], 'Red flag: Stiff neck');
+    assert.deepEqual(result.soap, soap);
+    assert.equal(calls, 1);
   });
-  it('escalates if Gemini fails all 3 attempts', async () => {
+  it('flags the AI red flags as high priority', async () => {
+    stub({ ...minor, escalate: true, redFlags: ['Lip swelling'], suggestedCtas: 3 });
+    const result = await runSummary(input);
+    assert.equal(result.flagged, true);
+    assert.equal(result.priority, 'high');
+    assert.deepEqual(result.redFlags, ['Lip swelling']);
+  });
+  it('still sends the case, flagged, if Gemini fails all 3 attempts', async () => {
     stub(new Error('down'));
-    assert.equal((await runSummary(input)).escalate, true);
+    const result = await runSummary(input);
+    assert.equal(result.flagged, true);
+    assert.equal(result.priority, 'high');
+    assert.equal(result.soap.subjective, '');
     assert.equal(calls, 3);
   });
 });

@@ -9,6 +9,18 @@ export interface DoctorVisitDetail {
 
 export type { QueueItem };
 
+/** GET /api/doctor/appointments */
+export interface AppointmentItem {
+  visitId: number;
+  patientId: string;
+  complaint: string;
+  status: 'offered' | 'booked';
+  location: string;
+  doctorName: string;
+  /** The booked time, or the earliest offered time while the patient hasn't picked yet. */
+  time: string | null;
+}
+
 /** GET /api/doctor/history */
 export interface HistoryItem {
   visitId: number;
@@ -41,6 +53,15 @@ export async function callApi<T>(getToken: () => Promise<string>, path: string, 
   if (!res.ok) throw new Error(reply?.message ?? `Server error (${res.status})`);
   return reply as T;
 }
+
+export const STATUS_LABELS: Record<string, string> = {
+  interviewing: 'Patient still answering the AI',
+  waiting_for_doctor: 'Waiting for a doctor',
+  appointment_offered: 'Appointment times offered',
+  appointment_booked: 'Appointment booked',
+  resolved: 'Resolved',
+  escalated: 'Sent to triage desk',
+};
 
 /** Queue priority (see lib/priority.ts). Sorts the queue before CTAS does. */
 export const PRIORITY_LABELS: Record<QueueItem['priority'], string> = {
