@@ -1,10 +1,13 @@
 import type { CaseStatus } from '../../lib/types';
-import { PATIENT_STATUS } from '../pages/patientApi';
-export function VisitStatus({ status }: { status: CaseStatus }) {
+import { patientStatus } from '../pages/patientApi';
+
+/** The visit's status chip. Anything a doctor hasn't answered yet reads "Pending". */
+export function VisitStatus({ status, doctorName = null }: { status: CaseStatus; doctorName?: string | null }) {
+  const shown = patientStatus(status, doctorName);
   return (
-    <span className={`visit-status status-${status}`}>
+    <span className={`visit-status status-${shown.key}`}>
       <span className="status-dot" aria-hidden="true" />
-      {PATIENT_STATUS[status]}
+      {shown.label}
     </span>
   );
 }

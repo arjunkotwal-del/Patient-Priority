@@ -3,8 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Bubble, ComposerCard, Composer, DoctorCard, Stamp, Suggestions, Typing } from '../components/Chat';
 import { subscribeToUpdates } from '../lib/live';
-import { PATIENT_STATUS, callApi, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
+import { callApi, patientStatus, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
 import { NotifyButton } from './VisitsPage';
+import { VisitStatus } from '../components/VisitStatus';
 
 const ORDER_LABELS = { lab: 'Lab test', imaging: 'Imaging', referral: 'Referral', other: 'Other' } as const;
 
@@ -116,7 +117,7 @@ export function VisitPage() {
           <div className="sc-visit-title">
             <span className="sc-label">Visit #{visit.id} · started {formatDate(visit.startedAt)}</span>
             <h1>{visit.complaint}</h1>
-            <span className={`status status-${visit.status}`}>{PATIENT_STATUS[visit.status]}</span>
+            <VisitStatus status={visit.status} doctorName={visit.doctorName} />
           </div>
           <Stamp>Private consultation · {formatDate(visit.startedAt)}</Stamp>
           <ul className="sc-thread">
@@ -138,7 +139,7 @@ export function VisitPage() {
             {interviewing && !question && !sending && <Typing />}
             <DoctorCard
               name={visit.doctorName ?? 'Doctor on duty'}
-              line={DOCTOR_LINE[visit.status]}
+              line={DOCTOR_LINE[patientStatus(visit.status, visit.doctorName).key]}
               action={visit.status === 'waiting_for_doctor' || interviewing ? <NotifyButton /> : undefined}
             />
           </ul>
@@ -159,7 +160,7 @@ export function VisitPage() {
             placeholder={question?.options?.length ? 'Tap a suggested answer, or type your own…' : 'Type your answer…'}
           />
         ) : (
-          <ClosedChat replied={visit.status !== 'waiting_for_doctor'} />
+          <ClosedChat replied={patientStatus(visit.status, visit.doctorName).key !== 'waiting_for_doctor'} />
         )}
       </div>
     </div>

@@ -137,7 +137,7 @@ export function PatientDashboardPage({ history = false }: { history?: boolean })
                       {formatTime(visit.startedAt)}
                       {visit.doctorName && ` · ${visit.doctorName}`}
                     </p>
-                    <VisitStatus status={visit.status} />
+                    <VisitStatus status={visit.status} doctorName={visit.doctorName} />
                   </div>
                   <Icon name="arrow" />
                 </Link>

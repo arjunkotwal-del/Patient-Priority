@@ -33,12 +33,21 @@ export const OPEN_STATUSES: CaseStatus[] = ['interviewing', 'waiting_for_doctor'
 /** What the patient sees for each status. Never anything about priority or triage level. */
 export const PATIENT_STATUS: Record<CaseStatus, string> = {
   interviewing: 'Answering questions',
-  waiting_for_doctor: 'With a doctor',
+  waiting_for_doctor: 'Pending',
   appointment_offered: 'Pick a time',
   appointment_booked: 'Booked',
   resolved: 'Plan ready',
   escalated: 'Check notifications',
 };
+
+/**
+ * The status to show the patient. A visit no doctor has answered is "Pending", including old
+ * visits that were closed automatically with no doctor on them.
+ */
+export function patientStatus(status: CaseStatus, doctorName: string | null): { key: CaseStatus; label: string } {
+  if (status === 'escalated' && !doctorName) return { key: 'waiting_for_doctor', label: PATIENT_STATUS.waiting_for_doctor };
+  return { key: status, label: PATIENT_STATUS[status] };
+}
 
 /** Times come from the server in UTC; show them in the patient's own time zone. */
 export const formatSlot = (iso: string) =>
