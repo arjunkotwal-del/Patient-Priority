@@ -98,7 +98,7 @@ export function VisitsPage() {
       )}
 
       <p className="disclaimer">
-        <span><b>*</b> Chest pain, trouble breathing, or anything that feels serious? Go to the triage desk, or call <strong>911</strong>.</span>
+        <span />
         <Link to="/history">My medical history →</Link>
       </p>
     </div>

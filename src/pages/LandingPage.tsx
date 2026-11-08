@@ -73,9 +73,6 @@ export function LandingPage() {
           </div>
         </section>
 
-        <p className="emergency" role="note">
-          <span><strong>Not for emergencies.</strong> Chest pain, trouble breathing or anything that feels serious: go to the triage desk now, or call 911.</span>
-        </p>
       </main>
 
       <footer className="footer">

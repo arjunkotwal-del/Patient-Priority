@@ -84,9 +84,8 @@ export function NewVisitPage() {
       </fieldset>
 
       {error && <p className="error">{error}</p>}
-      <div className="spread">
+      <div>
         <button className="btn btn-lg" disabled={busy || !complaint.trim()}>{busy ? 'Starting…' : 'Continue to follow-up questions →'}</button>
-        <span className="muted small">If you feel very unwell, go to the triage desk now.</span>
       </div>
     </form>
   );

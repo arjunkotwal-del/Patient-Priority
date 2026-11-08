@@ -239,7 +239,6 @@ function Waiting({ visit }: { visit: PatientVisitView }) {
           You can close this page. If notifications are on, we'll let you know when they reply.
           {visit.doctorName && ` ${visit.doctorName} has your case.`}
         </p>
-        <p className="small faint">If you start to feel worse, go to the triage desk.</p>
       </div>
     </section>
   );
@@ -275,7 +274,7 @@ function AppointmentPicker({ visit, path, onBooked, reload }: { visit: PatientVi
       <p><span className="eyebrow">Where</span><br />{appt.location}</p>
       <div className="stack-sm" role="radiogroup" aria-label="Pick a time">
         <span className="eyebrow">Pick a time</span>
-        {upcoming.length === 0 && <p className="muted">All of these times have passed. Please go to the triage desk.</p>}
+        {upcoming.length === 0 && <p className="muted">All of these times have passed.</p>}
         <div className="slots">
           {upcoming.map((s) => (
             <button key={s.id} type="button" role="radio" aria-checked={picked === s.id} className={picked === s.id ? 'slot selected' : 'slot'} onClick={() => setPicked(s.id)}>
@@ -344,7 +343,6 @@ function Plan({ visit }: { visit: PatientVisitView }) {
           </ul>
         </div>
       )}
-      <p className="emergency"><span><strong>Getting worse, or something new?</strong> Go to the triage desk, or call 911 in an emergency.</span></p>
     </section>
   );
 }

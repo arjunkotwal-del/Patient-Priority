@@ -11,17 +11,13 @@ export function DoctorLayout() {
       <aside className="side">
         <NavLink to="/doctor" className="side-brand">
           <span className="logo" aria-hidden="true">+</span>
-          <span><strong>PatientPriority</strong><span>Triage workstation</span></span>
+          <span><strong>PatientPriority</strong><span>Doctor workstation</span></span>
         </NavLink>
         <nav className="side-nav" aria-label="Clinical navigation">
           <NavLink to="/doctor" end><Icon name="queue" />Patient queue</NavLink>
           <NavLink to="/doctor/settings"><Icon name="settings" />Settings</NavLink>
         </nav>
         <div className="side-foot">
-          <div className="side-note">
-            <span className="eyebrow">Triage protocol</span>
-            <strong>Red flags go to the desk</strong>
-          </div>
           <div className="side-user">
             <span className="avatar" aria-hidden="true">{initials(doctor?.name ?? user?.name)}</span>
             <div>

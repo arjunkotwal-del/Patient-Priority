@@ -214,8 +214,6 @@ legend { font-family: var(--serif); font-size: 1.15rem; padding: 0; margin-botto
 .step { padding: 1.25rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--pane); display: flex; flex-direction: column; gap: 0.5rem; }
 .step .mono { color: var(--primary-text); }
 .step p { color: var(--text-2); font-size: 0.92rem; }
-.emergency { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.9rem 1.1rem; border-radius: var(--radius); border: 1px solid var(--danger-line); background: var(--danger-bg); color: var(--text); font-size: 0.9rem; }
-.emergency strong { color: var(--danger); }
 .footer { margin-top: auto; padding: 1.5rem 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; color: var(--text-3); font: 0.72rem var(--mono); }
 
 .auth-page { min-height: 100vh; display: grid; place-items: center; padding: 2rem 1rem; }
