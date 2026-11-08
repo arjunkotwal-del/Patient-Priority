@@ -1,19 +1,24 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { initials } from '../components/Icon';
+import { Bubble, ComposerCard, Composer, Suggestions, Typing } from '../components/Chat';
 import { notifyIfHidden, subscribeToUpdates } from '../lib/live';
-import type { Message } from '../../lib/types.ts';
-import { PATIENT_STATUS, TRIAGE_MESSAGE, callApi, formatClock, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
+import { PATIENT_STATUS, TRIAGE_MESSAGE, callApi, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
 
 const ORDER_LABELS = { lab: 'Lab test', imaging: 'Imaging', referral: 'Referral', other: 'Other' } as const;
 
-/** One visit as a single consultation thread: the AI interview, then the doctor's one reply or appointment. */
+/**
+ * One visit as a single chat: the complaint, the check-in answers, the AI follow-ups, then the
+ * doctor's one reply. The patient can only type during the AI interview.
+ */
 export function VisitPage() {
   const { id = '' } = useParams();
   const { getToken } = useAuth();
   const [visit, setVisit] = useState<PatientVisitView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const endRef = useRef<HTMLDivElement>(null);
   const path = `/visits/${encodeURIComponent(id)}`;
 
   const load = useCallback(async () => {
@@ -41,10 +46,15 @@ export function VisitPage() {
     });
   }, [load, getToken, id]);
 
+  useEffect(() => {
+    // Braces matter: newer browsers return a Promise from scrollIntoView, and React would treat it as a cleanup.
+    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [visit?.messages.length, visit?.status, sending]);
+
   if (error && !visit) {
     return (
       <div className="page page-narrow">
-        <Link to="/visits" className="back">← Consultation</Link>
+        <Link to="/visits" className="back">← Main chat</Link>
         <p className="error">{error}</p>
       </div>
     );
@@ -52,41 +62,96 @@ export function VisitPage() {
   if (!visit) return <div className="page page-narrow"><p className="muted">Loading…</p></div>;
   if (visit.status === 'escalated') return <TriageScreen />;
 
+  const interviewing = visit.status === 'interviewing';
+  const last = visit.messages.at(-1);
+  const question = interviewing && last?.from === 'ai' && last.kind === 'question' ? last : null;
+
+  // One answer at a time: two taps would make two AI questions.
+  const send = async (answer: string) => {
+    if (sending || !question) return;
+    setSending(answer);
+    setSendError(null);
+    try {
+      const step = await callApi<StepResponse>(getToken, `${path}/messages`, { text: answer });
+      if (step.status === 'interviewing') {
+        const now = new Date().toISOString();
+        setVisit({
+          ...visit,
+          messages: [
+            ...visit.messages,
+            { from: 'patient', kind: 'answer', text: answer, sentAt: now },
+            { from: 'ai', kind: 'question', text: step.question.text, options: step.question.options, sentAt: now },
+          ],
+        });
+      } else {
+        await load();
+      }
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : 'That did not send. Please try again.');
+      await load();
+    } finally {
+      setSending(null);
+    }
+  };
+
+  // The server stores the complaint as the first patient message; the check-in answers follow it.
+  const [first, ...rest] = visit.messages;
+  const startsWithComplaint = first?.from === 'patient' && first.text === visit.complaint;
+  const afterCheckIn = startsWithComplaint ? rest : visit.messages;
+
   return (
     <div className="page page-narrow">
-      <Link to="/visits" className="back">← Consultation</Link>
+      <Link to="/visits" className="back">← Main chat</Link>
       <section className="card welcome">
         <div>
-          <span className="eyebrow">Consultation #{visit.id}</span>
+          <span className="eyebrow">Consultation #{visit.id} · started {formatDate(visit.startedAt)}</span>
           <h1>{visit.complaint}</h1>
           <div className="welcome-meta">
             <span className={`status status-${visit.status}`}>{PATIENT_STATUS[visit.status]}</span>
-            <span className="mono faint">Started {formatDate(visit.startedAt)}</span>
           </div>
         </div>
         {visit.doctorName && <span className="on-duty"><span className="dot dot-slate" aria-hidden="true" />{visit.doctorName}</span>}
       </section>
 
-      {visit.status === 'interviewing' ? (
-        <Interview visit={visit} path={path} onStep={setVisit} reload={load} />
-      ) : (
-        <>
-          <section className="card chat-panel">
-            <span className="chat-stamp">Your answers · {formatDate(visit.startedAt)}</span>
-            <Thread messages={visit.messages} doctorName={visit.doctorName} />
-          </section>
-          {visit.status === 'waiting_for_doctor' && <Waiting visit={visit} />}
-          {visit.status === 'appointment_offered' && <AppointmentPicker visit={visit} path={path} onBooked={setVisit} reload={load} />}
-          {visit.status === 'appointment_booked' && <Booked visit={visit} />}
-          {visit.status === 'resolved' && <Plan visit={visit} />}
-          <ClosedChat replied={visit.status !== 'waiting_for_doctor'} />
-        </>
-      )}
+      <section className="card chat-panel" aria-live="polite">
+        <span className="chat-stamp">Private consultation · {formatDate(visit.startedAt)}</span>
+        <ul className="thread">
+          <Bubble from="patient" text={visit.complaint} time={startsWithComplaint ? first.sentAt : visit.startedAt} />
+          {visit.premadeAnswers.map((qa, i) => (
+            <li key={`qa${i}`} className="thread-pair">
+              <ul className="thread">
+                <Bubble from="ai" text={qa.question} />
+                <Bubble from="patient" text={qa.answer} />
+              </ul>
+            </li>
+          ))}
+          {afterCheckIn.map((m, i) => (
+            <Bubble key={i} from={m.from} text={m.text} time={m.sentAt} doctorName={visit.doctorName} />
+          ))}
+          {sending && <Bubble from="patient" text={sending} pending />}
+          {sending && <Typing />}
+          {question && !sending && <Suggestions options={question.options ?? []} onPick={(o) => void send(o)} />}
+          {interviewing && !question && !sending && <Typing />}
+        </ul>
+        {sendError && <p className="error">{sendError}</p>}
+        <div ref={endRef} />
+      </section>
 
-      <p className="disclaimer">
-        <span><b>*</b> If you are experiencing a life-threatening emergency, call <strong>911</strong> immediately.</span>
-        <span className="mono faint">AI intake · reviewed by a doctor</span>
-      </p>
+      {visit.status === 'waiting_for_doctor' && <Waiting visit={visit} />}
+      {visit.status === 'appointment_offered' && <AppointmentPicker visit={visit} path={path} onBooked={setVisit} reload={load} />}
+      {visit.status === 'appointment_booked' && <Booked visit={visit} />}
+      {visit.status === 'resolved' && <Plan visit={visit} />}
+
+      {interviewing ? (
+        <Composer
+          autoFocus
+          disabled={!question || !!sending}
+          onSend={(t) => void send(t)}
+          placeholder={question?.options?.length ? 'Tap an answer above, or type your own…' : 'Type your answer…'}
+        />
+      ) : (
+        <ClosedChat replied={visit.status !== 'waiting_for_doctor'} />
+      )}
     </div>
   );
 }
@@ -99,132 +164,9 @@ function TriageScreen() {
         <div className="triage-icon" aria-hidden>!</div>
         <h1>{TRIAGE_MESSAGE}</h1>
         <p className="muted">Show this screen to the nurse at the desk.</p>
-        <Link to="/visits" className="btn btn-secondary">Back to consultation</Link>
+        <Link to="/visits" className="btn btn-secondary">Back to main chat</Link>
       </div>
     </div>
-  );
-}
-
-function Bubble({ m, doctorName }: { m: Message; doctorName: string | null }) {
-  const who = m.from === 'patient' ? 'You' : m.from === 'doctor' ? doctorName ?? 'Your doctor' : 'Intake assistant';
-  return (
-    <li className={`msg msg-${m.from}`}>
-      <span className="msg-icon" aria-hidden="true">{m.from === 'patient' ? 'You' : m.from === 'doctor' ? initials(doctorName) : '+'}</span>
-      <div className="msg-main">
-        <div className="msg-head">
-          <strong>{who}</strong>
-          {m.from === 'ai' && <span className="msg-tag">AI</span>}
-          {m.from === 'doctor' && <span className="msg-tag">Doctor</span>}
-          <span className="msg-time">{formatClock(m.sentAt)}</span>
-        </div>
-        <div className="msg-body">{m.text}</div>
-      </div>
-    </li>
-  );
-}
-
-function Thread({ messages, doctorName }: { messages: Message[]; doctorName: string | null }) {
-  return (
-    <ul className="stack" style={{ gap: '1.3rem' }}>
-      {messages.map((m, i) => <Bubble key={i} m={m} doctorName={doctorName} />)}
-    </ul>
-  );
-}
-
-// ---- The AI interview ------------------------------------------------------
-
-function Interview({ visit, path, onStep, reload }: { visit: PatientVisitView; path: string; onStep: (v: PatientVisitView) => void; reload: () => Promise<void> }) {
-  const { getToken } = useAuth();
-  const [text, setText] = useState('');
-  const [sending, setSending] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-
-  const last = visit.messages.at(-1);
-  const question = last?.from === 'ai' && last.kind === 'question' ? last : null;
-  const options = question?.options ?? [];
-
-  useEffect(() => {
-    // Braces matter: newer browsers return a Promise from scrollIntoView, and React would treat it as a cleanup.
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [visit.messages.length, sending]);
-
-  const send = async (answer: string) => {
-    const clean = answer.trim();
-    if (!clean || sending) return; // one answer at a time: two taps would make two AI questions
-    setSending(clean);
-    setError(null);
-    try {
-      const step = await callApi<StepResponse>(getToken, `${path}/messages`, { text: clean });
-      setText('');
-      if (step.status === 'interviewing') {
-        const now = new Date().toISOString();
-        onStep({
-          ...visit,
-          messages: [
-            ...visit.messages,
-            { from: 'patient', kind: 'answer', text: clean, sentAt: now },
-            { from: 'ai', kind: 'question', text: step.question.text, options: step.question.options, sentAt: now },
-          ],
-        });
-      } else {
-        await reload();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'That did not send. Please try again.');
-      await reload();
-    } finally {
-      setSending(null);
-    }
-  };
-
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    void send(text);
-  };
-
-  return (
-    <>
-      <section className="card chat-panel" aria-live="polite">
-        <span className="chat-stamp">Private intake · about 4 to 8 questions</span>
-        <Thread messages={visit.messages} doctorName={null} />
-        {sending && (
-          <ul className="stack" style={{ gap: '1.3rem' }}>
-            <Bubble m={{ from: 'patient', kind: 'answer', text: sending }} doctorName={null} />
-            <li className="msg msg-ai" aria-label="The assistant is thinking">
-              <span className="msg-icon" aria-hidden="true">+</span>
-              <div className="msg-body typing"><span /><span /><span /></div>
-            </li>
-          </ul>
-        )}
-        {question && !sending && options.length > 0 && (
-          <div className="suggest">
-            <span className="eyebrow">Tap an answer</span>
-            <div className="choices">
-              {options.map((o) => (
-                <button key={o} type="button" className="choice" onClick={() => void send(o)}>{o}</button>
-              ))}
-            </div>
-          </div>
-        )}
-        {!question && !sending && <p className="muted">Getting your next question…</p>}
-        <div ref={endRef} />
-      </section>
-
-      {error && <p className="error">{error}</p>}
-      <form className="composer" onSubmit={onSubmit}>
-        <input
-          value={text}
-          maxLength={2000}
-          disabled={!question || !!sending}
-          autoFocus={options.length === 0}
-          aria-label="Your answer"
-          placeholder={options.length ? 'Or type your own answer…' : 'Type your answer…'}
-          onChange={(e) => setText(e.target.value)}
-        />
-        <button className="btn send" disabled={!text.trim() || !question || !!sending} aria-label="Send">↑</button>
-      </form>
-    </>
   );
 }
 
@@ -236,12 +178,14 @@ function Interview({ visit, path, onStep, reload }: { visit: PatientVisitView; p
  */
 function ClosedChat({ replied }: { replied: boolean }) {
   return (
-    <div className="composer composer-closed" role="status">
-      <span className="muted">
-        {replied ? 'The doctor has replied, so this chat is closed.' : 'Your answers are with the doctor. This chat is closed while they review.'}
-      </span>
-      <Link to="/visits/new" className="btn btn-secondary">Start a new visit</Link>
-    </div>
+    <ComposerCard>
+      <div className="composer composer-closed" role="status">
+        <span className="muted">
+          {replied ? 'The doctor has replied, so this chat is closed.' : 'Your answers are with the doctor. This chat is closed while they review.'}
+        </span>
+        <Link to="/visits" className="btn btn-secondary">Start a new visit</Link>
+      </div>
+    </ComposerCard>
   );
 }
 

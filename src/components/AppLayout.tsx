@@ -14,8 +14,7 @@ export function AppLayout() {
           <span><strong>PatientPriority</strong><span>Patient portal</span></span>
         </NavLink>
         <nav className="side-nav" aria-label="Patient navigation">
-          <NavLink to="/visits" end><Icon name="chat" />Consultation</NavLink>
-          <NavLink to="/visits/new"><Icon name="plus" />Start a visit</NavLink>
+          <NavLink to="/visits" end><Icon name="chat" />Main chat</NavLink>
           <NavLink to="/history"><Icon name="history" />My medical history</NavLink>
           <NavLink to="/account"><Icon name="user" />Account</NavLink>
           <NavLink to="/settings"><Icon name="settings" />Settings</NavLink>

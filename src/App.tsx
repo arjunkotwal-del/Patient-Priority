@@ -6,7 +6,6 @@ import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { VerifyPage } from './pages/VerifyPage';
 import { VisitsPage } from './pages/VisitsPage';
-import { NewVisitPage } from './pages/NewVisitPage';
 import { VisitPage } from './pages/VisitPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -35,7 +34,7 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/visits" element={<VisitsPage />} />
-          <Route path="/visits/new" element={<NewVisitPage />} />
+          <Route path="/visits/new" element={<Navigate to="/visits" replace />} />
           <Route path="/visits/:id" element={<VisitPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/settings" element={<SettingsPage />} />

@@ -22,7 +22,7 @@ export function HistoryPage() {
       {!data && !error && <p className="muted">Loading…</p>}
       {data && past.length === 0 && (
         <div className="empty">
-          No past visits yet. <Link to="/visits/new">Start a visit</Link>
+          No past visits yet. <Link to="/visits">Start one in the main chat</Link>
         </div>
       )}
       {past.length > 0 && (
