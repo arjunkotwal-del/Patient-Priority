@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { Bubble, ComposerCard, Composer, DoctorCard, HeaderCard, Stamp, Suggestions, Typing } from '../components/Chat';
+import { Bubble, ComposerCard, Composer, DoctorCard, Stamp, Suggestions, Typing } from '../components/Chat';
 import { notifyIfHidden, subscribeToUpdates } from '../lib/live';
 import { PATIENT_STATUS, callApi, formatDate, formatSlot, type PatientVisitView, type StepResponse } from './patientApi';
-import { NotifyButton, displayName } from './VisitsPage';
+import { NotifyButton } from './VisitsPage';
 
 const ORDER_LABELS = { lab: 'Lab test', imaging: 'Imaging', referral: 'Referral', other: 'Other' } as const;
 
@@ -75,7 +75,6 @@ export function VisitPage() {
   const interviewing = visit.status === 'interviewing';
   const last = visit.messages.at(-1);
   const question = interviewing && last?.from === 'ai' && last.kind === 'question' ? last : null;
-  const name = displayName(user?.name);
 
   // One answer at a time: two taps would make two AI questions.
   const send = async (answer: string) => {
@@ -111,59 +110,58 @@ export function VisitPage() {
   const afterCheckIn = startsWithComplaint ? rest : visit.messages;
 
   return (
-    <div className="sc-page">
-      <HeaderCard
-        name={user?.name}
-        title={`Welcome back${name ? `, ${name}` : ''}`}
-        chip={`Visit #${visit.id}`}
-        sub={`${PATIENT_STATUS[visit.status]} · ${visit.complaint}`}
-        attending={visit.doctorName ?? 'Doctor on duty'}
-        attendingSub={`Started ${formatDate(visit.startedAt)}`}
-      />
+    <div className="sc-full">
+      <div className="sc-scroll" aria-live="polite">
+        <div className="sc-column">
+          <div className="sc-visit-title">
+            <span className="sc-label">Visit #{visit.id} · started {formatDate(visit.startedAt)}</span>
+            <h1>{visit.complaint}</h1>
+            <span className={`status status-${visit.status}`}>{PATIENT_STATUS[visit.status]}</span>
+          </div>
+          <Stamp>Private consultation · {formatDate(visit.startedAt)}</Stamp>
+          <ul className="sc-thread">
+            <Bubble from="patient" text={visit.complaint} time={startsWithComplaint ? first.sentAt : visit.startedAt} patientName={user?.name} />
+            {visit.premadeAnswers.map((qa, i) => (
+              <li key={`qa${i}`} className="thread-pair">
+                <ul>
+                  <Bubble from="ai" text={qa.question} />
+                  <Bubble from="patient" text={qa.answer} patientName={user?.name} />
+                </ul>
+              </li>
+            ))}
+            {afterCheckIn.map((m, i) => (
+              <Bubble key={i} from={m.from} text={m.text} time={m.sentAt} patientName={user?.name} doctorName={visit.doctorName} />
+            ))}
+            {sending && <Bubble from="patient" text={sending} patientName={user?.name} pending />}
+            {sending && <Typing />}
+            {question && !sending && <Suggestions options={question.options ?? []} onPick={(o) => void send(o)} />}
+            {interviewing && !question && !sending && <Typing />}
+            <DoctorCard
+              name={visit.doctorName ?? 'Doctor on duty'}
+              line={DOCTOR_LINE[visit.status]}
+              action={visit.status === 'waiting_for_doctor' || interviewing ? <NotifyButton /> : undefined}
+            />
+          </ul>
+          {sendError && <p className="error">{sendError}</p>}
+          {visit.status === 'appointment_offered' && <AppointmentPicker visit={visit} path={path} onBooked={setVisit} reload={load} />}
+          {visit.status === 'appointment_booked' && <Booked visit={visit} />}
+          {visit.status === 'resolved' && <Plan visit={visit} />}
+          <div ref={endRef} />
+        </div>
+      </div>
 
-      <section className="sc-chat" aria-live="polite">
-        <Stamp>Private consultation · {formatDate(visit.startedAt)}</Stamp>
-        <ul className="sc-thread">
-          <Bubble from="patient" text={visit.complaint} time={startsWithComplaint ? first.sentAt : visit.startedAt} patientName={user?.name} />
-          {visit.premadeAnswers.map((qa, i) => (
-            <li key={`qa${i}`} className="thread-pair">
-              <ul>
-                <Bubble from="ai" text={qa.question} />
-                <Bubble from="patient" text={qa.answer} patientName={user?.name} />
-              </ul>
-            </li>
-          ))}
-          {afterCheckIn.map((m, i) => (
-            <Bubble key={i} from={m.from} text={m.text} time={m.sentAt} patientName={user?.name} doctorName={visit.doctorName} />
-          ))}
-          {sending && <Bubble from="patient" text={sending} patientName={user?.name} pending />}
-          {sending && <Typing />}
-          {question && !sending && <Suggestions options={question.options ?? []} onPick={(o) => void send(o)} />}
-          {interviewing && !question && !sending && <Typing />}
-          <DoctorCard
-            name={visit.doctorName ?? 'Doctor on duty'}
-            line={DOCTOR_LINE[visit.status]}
-            action={visit.status === 'waiting_for_doctor' || interviewing ? <NotifyButton /> : undefined}
+      <div className="sc-column sc-bottom">
+        {interviewing ? (
+          <Composer
+            autoFocus
+            disabled={!question || !!sending}
+            onSend={(t) => void send(t)}
+            placeholder={question?.options?.length ? 'Tap a suggested answer, or type your own…' : 'Type your answer…'}
           />
-        </ul>
-        {sendError && <p className="error">{sendError}</p>}
-        <div ref={endRef} />
-      </section>
-
-      {visit.status === 'appointment_offered' && <AppointmentPicker visit={visit} path={path} onBooked={setVisit} reload={load} />}
-      {visit.status === 'appointment_booked' && <Booked visit={visit} />}
-      {visit.status === 'resolved' && <Plan visit={visit} />}
-
-      {interviewing ? (
-        <Composer
-          autoFocus
-          disabled={!question || !!sending}
-          onSend={(t) => void send(t)}
-          placeholder={question?.options?.length ? 'Tap a suggested answer, or type your own…' : 'Type your answer…'}
-        />
-      ) : (
-        <ClosedChat replied={visit.status !== 'waiting_for_doctor'} />
-      )}
+        ) : (
+          <ClosedChat replied={visit.status !== 'waiting_for_doctor'} />
+        )}
+      </div>
     </div>
   );
 }

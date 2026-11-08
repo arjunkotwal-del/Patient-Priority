@@ -392,7 +392,6 @@ legend { font-family: var(--serif); font-size: 1.15rem; padding: 0; margin-botto
 /* Shell */
 .portal { min-height: 100vh; background: #141312; }
 .portal-side { position: fixed; inset: 0 auto 0 0; width: 18rem; z-index: 50; display: flex; flex-direction: column; justify-content: space-between; padding: 1.25rem 0; background: #1c1b1a; box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04); }
-.portal-side-top { display: flex; flex-direction: column; gap: 2rem; padding: 0 1.25rem; }
 .portal-brand { display: flex; align-items: center; gap: 0.875rem; color: #e6e2df; }
 .portal-brand:hover { color: #e6e2df; }
 .portal-logo { width: 2.25rem; height: 2.25rem; border-radius: 0.5rem; background: #201f1e; color: #ffb59e; display: grid; place-items: center; }
@@ -404,21 +403,7 @@ legend { font-family: var(--serif); font-size: 1.15rem; padding: 0; margin-botto
 .portal-nav a.active { background: #2b2a29; color: #ffb59e; font-weight: 600; font-size: 0.9375rem; }
 .portal-nav-label { display: flex; align-items: center; gap: 0.875rem; }
 .portal-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #d97757; }
-.portal-side-box { margin: 0 1.25rem; padding: 0.875rem; border-radius: 0.5rem; background: #201f1e; display: flex; align-items: center; justify-content: space-between; color: #f0bd8b; }
-.portal-side-box small { display: block; font: 400 0.6875rem/0.875rem var(--mono); letter-spacing: 0.03em; text-transform: uppercase; color: #dbc1b9; }
-.portal-side-box strong { display: block; font: 500 0.75rem/1rem var(--mono); letter-spacing: 0.02em; color: #f0bd8b; }
-.portal-top { position: fixed; top: 0; left: 18rem; right: 0; height: 4rem; z-index: 40; display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; background: rgba(20, 19, 18, 0.8); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04); }
-.portal-top-nav { display: flex; align-items: center; gap: 2rem; }
-.portal-top-nav a { color: #dbc1b9; font: 400 0.875rem/1.5rem var(--sans); }
-.portal-top-nav a:hover, .portal-top-nav a.active { color: #e6e2df; }
-.portal-top-nav a.active { font-weight: 600; font-size: 0.9375rem; }
-.portal-top-right { display: flex; align-items: center; gap: 0.875rem; margin-left: auto; }
-.portal-duty { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.875rem; border-radius: 0.75rem; background: #201f1e; font: 400 0.6875rem/0.875rem var(--mono); letter-spacing: 0.03em; color: #dbc1b9; }
-.portal-duty-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #afcbd6; }
-.portal-me { width: 2rem; height: 2rem; border-radius: 50%; background: #ffb59e; color: #5c1902; display: grid; place-items: center; }
-.portal-me:hover { color: #5c1902; opacity: 0.9; }
 .portal-main { padding: 5.25rem 2rem 2rem 20rem; }
-.portal-main > .page { padding: 0; }
 
 /* Page column */
 .sc-page { width: 100%; max-width: 64rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1.25rem; }
@@ -496,18 +481,69 @@ legend { font-family: var(--serif); font-size: 1.15rem; padding: 0; margin-botto
 /* Cards below the chat (appointment picker, plan) keep the portal surfaces. */
 .portal .card { background: #1c1b1a; border-color: transparent; }
 
-@media (max-width: 1100px) {
-  .portal-top-nav { display: none; }
-}
 @media (max-width: 860px) {
   .portal-side { position: static; width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; }
-  .portal-side-top { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0; }
   .portal-nav { flex-direction: row; flex-wrap: wrap; }
   .portal-nav a { padding: 0.5rem 0.65rem; }
-  .portal-side-box { display: none; }
-  .portal-top { position: static; height: auto; padding: 0.75rem 1rem; }
   .portal-main { padding: 1rem; }
   .sc-chat { padding: 1.1rem; gap: 1.5rem; }
   .sc-thread { gap: 1.5rem; }
   .sc-chips, .sc-doctor { margin-left: 0; }
+}
+
+/* =====================================================================
+   Full-screen chat: no top bar, the chat fills the space beside the sidebar.
+   Empty state = centred greeting and a big message box.
+   ===================================================================== */
+.portal-side { justify-content: flex-start; gap: 1.5rem; overflow-y: auto; }
+.portal-brand { padding: 0 1.25rem; }
+.portal-nav { padding: 0 0.75rem; }
+.portal-nav a { padding: 0.6rem 0.875rem; }
+.portal-recents { display: flex; flex-direction: column; gap: 0.1rem; padding: 0 0.75rem; min-height: 0; }
+.portal-recents-title { padding: 0 0.875rem 0.35rem; font: 500 0.75rem/1rem var(--sans); color: #a38c85; }
+.portal-recents a { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.45rem 0.875rem; border-radius: 0.5rem; color: #e6e2df; font: 400 0.875rem/1.4rem var(--sans); }
+.portal-recents a:hover { background: #201f1e; color: #e6e2df; }
+.portal-recents a.active { background: #2b2a29; }
+.portal-recent-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-user { margin: auto 0.75rem 0; display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.875rem; border-radius: 0.5rem; color: #e6e2df; }
+.portal-user:hover, .portal-user.active { background: #201f1e; color: #e6e2df; }
+.portal-user-avatar { width: 1.9rem; height: 1.9rem; border-radius: 50%; background: #2b2a29; color: #dbc1b9; display: grid; place-items: center; font: 600 0.75rem var(--sans); text-transform: uppercase; flex-shrink: 0; }
+.portal-user-text { min-width: 0; }
+.portal-user-text strong { display: block; font: 500 0.875rem/1.2rem var(--sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-user-text small { display: block; font: 400 0.7rem/1rem var(--mono); color: #a38c85; }
+
+.portal-main { padding: 0 0 0 18rem; min-height: 100vh; }
+.portal-main > .sc-page, .portal-main > .page { padding: 2rem; }
+
+/* Full-height chat */
+.sc-full { min-height: 100vh; display: flex; flex-direction: column; }
+.sc-scroll { flex: 1; padding: 2rem 2rem 1rem; }
+.sc-column { width: 100%; max-width: 48rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+.sc-bottom { position: sticky; bottom: 0; padding: 0 2rem 1.25rem; background: linear-gradient(to bottom, rgba(20, 19, 18, 0), #141312 1.25rem); box-sizing: content-box; max-width: 48rem; }
+.sc-bottom .sc-composer { position: static; }
+.sc-visit-title { display: flex; flex-direction: column; align-items: flex-start; gap: 0.4rem; padding-bottom: 0.5rem; border-bottom: 1px solid #2b2a29; }
+.sc-visit-title h1 { font: 400 1.75rem/2.25rem var(--serif); letter-spacing: -0.015em; color: #e6e2df; }
+.sc-full .sc-chips, .sc-full .sc-doctor { margin-left: 3.125rem; }
+.sc-full .card { background: #1c1b1a; }
+
+/* Greeting screen */
+.sc-full-hero { justify-content: center; align-items: center; padding: 2rem; }
+.sc-hero { width: 100%; max-width: 42rem; display: flex; flex-direction: column; align-items: center; gap: 1.25rem; margin-top: -6vh; }
+.sc-greet { display: flex; align-items: center; gap: 0.75rem; font: 400 2.5rem/1.15 var(--serif); letter-spacing: -0.02em; color: #e6e2df; text-align: center; }
+.sc-greet-icon { color: #d97757; }
+.sc-hero-sub { color: #dbc1b9; font: 400 0.95rem/1.5 var(--sans); text-align: center; }
+.sc-hero .sc-composer { position: static; width: 100%; background: #201f1e; border: 1px solid #2b2a29; }
+.sc-hero .sc-input { background: transparent; padding: 0.35rem 0.35rem 0.35rem 0.5rem; }
+.sc-hero .sc-input textarea { font-size: 1rem; min-height: 3.5rem; }
+.sc-hero-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
+
+@media (max-width: 860px) {
+  .portal-side { position: static; width: auto; flex-direction: column; overflow: visible; }
+  .portal-recents { display: none; }
+  .portal-user { margin-top: 0; }
+  .portal-main { padding: 0; }
+  .sc-scroll { padding: 1rem; }
+  .sc-bottom { padding: 0 1rem 1rem; }
+  .sc-greet { font-size: 2rem; }
+  .sc-full .sc-chips, .sc-full .sc-doctor { margin-left: 0; }
 }

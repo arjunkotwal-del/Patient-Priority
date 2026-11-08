@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import { Bubble, Composer, DoctorCard, HeaderCard, Stamp, Suggestions, Typing } from '../components/Chat';
+import { Bubble, Composer, Stamp, Suggestions, Typing } from '../components/Chat';
 import { Icon } from '../components/Icon';
 import { askNotificationPermission, notifyIfHidden, subscribeToUpdates } from '../lib/live';
 import { PREMADE_QUESTIONS } from '../../lib/premadeQuestions.ts';
-import { OPEN_STATUSES, PATIENT_STATUS, callApi, formatClock, formatDate, type MyVisits, type StepResponse, type VisitSummary } from './patientApi';
+import { PATIENT_STATUS, callApi, formatClock, formatDate, type MyVisits, type StepResponse, type VisitSummary } from './patientApi';
 
 const GREETING = "Hi! What's bothering you today? A doctor will review your answers and reply here.";
 const QUICK_STARTS = ['Sore throat', 'Ear pain', 'Sprained ankle', 'Rash'];
@@ -66,7 +66,7 @@ export function NotifyButton() {
 export function VisitsPage() {
   const { user, getToken } = useAuth();
   const navigate = useNavigate();
-  const { data, error } = useMyVisits();
+  const { error } = useMyVisits();
   const [complaint, setComplaint] = useState<string | null>(null);
   const [answers, setAnswers] = useState<{ question: string; answer: string; at: string }[]>([]);
   const [complaintAt, setComplaintAt] = useState('');
@@ -75,7 +75,6 @@ export function VisitsPage() {
   const [openedAt] = useState(() => new Date().toISOString());
   const endRef = useRef<HTMLDivElement>(null);
 
-  const open = data?.visits.filter((v) => OPEN_STATUSES.includes(v.status)) ?? [];
   const name = displayName(user?.name);
   const question = complaint !== null ? PREMADE_QUESTIONS[answers.length] : undefined;
   const done = complaint !== null && !question;
@@ -113,65 +112,80 @@ export function VisitsPage() {
     }
   };
 
-  return (
-    <div className="sc-page">
-      <HeaderCard
-        name={user?.name}
-        title={`Welcome back${name ? `, ${name}` : ''}`}
-        chip="New consultation"
-        sub={open.length ? `${open.length} open visit${open.length > 1 ? 's' : ''} below` : 'Virtual fast track · minor problems'}
-        attending="Doctor on duty"
-        attendingSub="Replies here · updates live"
-      />
-
-      {open.length > 0 && (
-        <section className="card">
-          <div className="card-head"><h2>Open visits</h2><span className="sc-label">{open.length}</span></div>
-          <VisitList visits={open} />
-        </section>
-      )}
-      {error && <p className="error">{error}</p>}
-
-      <section className="sc-chat" aria-live="polite">
-        <Stamp>Private consultation · Today {formatClock(openedAt)}</Stamp>
-        <ul className="sc-thread">
-          <Bubble from="ai" text={GREETING} time={openedAt} />
-          {complaint === null && <Suggestions label="Suggested starting points" options={QUICK_STARTS} onPick={send} />}
-          {complaint !== null && <Bubble from="patient" text={complaint} time={complaintAt} patientName={user?.name} />}
-          {answers.map((a, i) => (
-            <li key={i} className="thread-pair">
-              <ul>
-                <Bubble from="ai" text={a.question} />
-                <Bubble from="patient" text={a.answer} time={a.at} patientName={user?.name} />
-              </ul>
-            </li>
-          ))}
-          {question && (
-            <>
-              <Bubble from="ai" text={answers.length === 0 ? `Thanks. A few quick questions first. ${question.text}` : question.text} />
-              <Suggestions options={[...(question.choices ?? []), SKIP]} onPick={send} />
-            </>
-          )}
-          {done && !startError && <Typing />}
-          <DoctorCard name="Doctor on duty" line="Reviews every visit · You'll be notified when they reply" action={<NotifyButton />} />
-        </ul>
-        {startError && (
-          <div className="stack-sm">
-            <p className="error">{startError}</p>
-            <button className="sc-doctor-btn" style={{ alignSelf: 'flex-start' }} onClick={() => void start()}>Try again</button>
+  // Before the patient says anything: a centred greeting and a big message box.
+  if (complaint === null) {
+    return (
+      <div className="sc-full sc-full-hero">
+        <div className="sc-hero">
+          <h1 className="sc-greet">
+            <Icon name="neurology" size={40} className="sc-greet-icon" />
+            {timeOfDay()}{name ? `, ${name}` : ''}
+          </h1>
+          <p className="sc-hero-sub">{GREETING}</p>
+          <Composer autoFocus onSend={send} placeholder="Describe your symptoms in your own words…" />
+          <div className="sc-hero-chips">
+            {QUICK_STARTS.map((c) => (
+              <button key={c} type="button" className="sc-chip" onClick={() => send(c)}>
+                <Icon name="add_circle" size={16} className="sc-tertiary" />
+                <span>{c}</span>
+              </button>
+            ))}
           </div>
-        )}
-        <div ref={endRef} />
-      </section>
+          {error && <p className="error">{error}</p>}
+        </div>
+      </div>
+    );
+  }
 
-      <Composer
-        autoFocus
-        disabled={done}
-        onSend={send}
-        placeholder={complaint === null ? 'Describe your symptoms in your own words…' : question?.choices ? 'Tap a suggested answer, or type your own…' : 'Type your answer…'}
-      />
+  return (
+    <div className="sc-full">
+      <div className="sc-scroll" aria-live="polite">
+        <div className="sc-column">
+          <Stamp>Private consultation · Today {formatClock(openedAt)}</Stamp>
+          <ul className="sc-thread">
+            <Bubble from="ai" text={GREETING} time={openedAt} />
+            <Bubble from="patient" text={complaint} time={complaintAt} patientName={user?.name} />
+            {answers.map((a, i) => (
+              <li key={i} className="thread-pair">
+                <ul>
+                  <Bubble from="ai" text={a.question} />
+                  <Bubble from="patient" text={a.answer} time={a.at} patientName={user?.name} />
+                </ul>
+              </li>
+            ))}
+            {question && (
+              <>
+                <Bubble from="ai" text={answers.length === 0 ? `Thanks. A few quick questions first. ${question.text}` : question.text} />
+                <Suggestions options={[...(question.choices ?? []), SKIP]} onPick={send} />
+              </>
+            )}
+            {done && !startError && <Typing />}
+          </ul>
+          {startError && (
+            <div className="stack-sm">
+              <p className="error">{startError}</p>
+              <button className="sc-doctor-btn" style={{ alignSelf: 'flex-start' }} onClick={() => void start()}>Try again</button>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+      </div>
+      <div className="sc-column sc-bottom">
+        <Composer
+          autoFocus
+          disabled={done}
+          onSend={send}
+          placeholder={question?.choices ? 'Tap a suggested answer, or type your own…' : 'Type your answer…'}
+        />
+      </div>
     </div>
   );
+}
+
+/** "Morning", "Afternoon" or "Evening", from the patient's own clock. */
+function timeOfDay() {
+  const hour = new Date().getHours();
+  return hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening';
 }
 
 export function VisitList({ visits }: { visits: VisitSummary[] }) {
