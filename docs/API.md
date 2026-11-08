@@ -34,11 +34,14 @@ interviewing -> waiting_for_doctor -> resolved                       (doctor rep
                         |
                         `-> appointment_offered -> appointment_booked -> resolved   (doctor replies after the in-person visit)
 
-Any open step can become: escalated (go to the triage desk)
+A doctor can also escalate an open case: escalated (asked to come in person)
 ```
 
-Whenever a response has `status: "escalated"`, show the big triage screen with `patientMessage`
-(`"Please go to the triage desk now."`) and nothing else. Never show a reason or diagnosis.
+**Red flags never stop the chat.** The AI keeps asking until it has the full picture, then every case
+goes to the doctor. Cases with red flags (from the keyword scanner or the AI) are listed first in the
+queue, as high priority, with `redFlags` and a `Red flag: ...` reason. The doctor decides whether to escalate.
+If a visit is `escalated`, the patient sees a short "your doctor would like to see you in person" note.
+Never show a reason or diagnosis.
 
 ---
 
@@ -52,16 +55,13 @@ Send the patient's own words and the premade answers (from `lib/premadeQuestions
   "premadeAnswers": [{ "question": "When did it start?", "answer": "3 days ago" }]
 }
 ```
-Returns `201` with one of the three **step responses**:
+Returns `201` with one of the two **step responses**:
 ```json
 { "visitId": 12, "status": "interviewing",
   "question": { "text": "Is it hard to swallow your own spit?", "options": ["Yes, really hard", "A little", "No"], "allowOther": true } }
 ```
 ```json
 { "visitId": 12, "status": "waiting_for_doctor", "patientMessage": "Thanks. A doctor will review your answers and reply here." }
-```
-```json
-{ "visitId": 12, "status": "escalated", "patientMessage": "Please go to the triage desk now." }
 ```
 Show `options` as buttons. If `allowOther` is true, also show a text box. `options` can be empty: then it's a typed answer.
 
@@ -170,7 +170,7 @@ Only works on a `waiting_for_doctor` case.
 `QueueItem`:
 ```json
 { "visitId": 12, "patientId": "p_...", "complaint": "Ear pain", "status": "waiting_for_doctor",
-  "suggestedCtas": 4, "priority": "high", "priorityReasons": ["AI rated medium: Moderate one-sided ear pain", "Keyword: Getting worse"],
+  "suggestedCtas": 4, "priority": "high", "priorityReasons": ["AI rated medium: Moderate one-sided ear pain", "Keyword: Getting worse"], "redFlags": [],
   "startedAt": "...", "waitingMinutes": 25,
   "assignedDoctor": { "id": "demo-dr-rivera", "name": "Dr. Sam Rivera (demo)" }, "unreadForDoctor": 2 }
 ```

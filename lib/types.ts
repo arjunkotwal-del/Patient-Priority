@@ -86,6 +86,8 @@ export interface QueueItem {
   /** From keyword rules plus the AI's rating. Doctors only. */
   priority: 'high' | 'medium' | 'low';
   priorityReasons: string[];
+  /** Red flags found during the interview. Flagged cases are listed first. */
+  redFlags: string[];
   startedAt: string;
   waitingMinutes: number;
   assignedDoctor: { id: string; name: string } | null;

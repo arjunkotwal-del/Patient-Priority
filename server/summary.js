@@ -1,6 +1,6 @@
 // Turns a finished interview into the doctor's summary note, a suggested CTAS, and the
 // queue priority. Used by visits.js.
-// If the rules or the AI say escalate, we escalate. Rules always win.
+// Red flags from the rules or the AI flag the case as high priority for the doctor.
 import { computePriority, PRIORITIES } from '../lib/priority.ts';
 import { getComplaintFlags } from '../lib/redFlags.ts';
 import { buildSummaryPrompt } from '../lib/summaryPrompt.ts';
@@ -51,23 +51,37 @@ function summaryText(input) {
   return [conversationText(input), ...premade].join('\n');
 }
 
-const escalated = (redFlags) => ({ escalate: true, redFlags, suggestedCtas: 3, priority: 'high', priorityReasons: [], soap: EMPTY_SOAP });
-
+/**
+ * Every case goes to the doctor. A red flag (from the scanner or the AI) never stops the case:
+ * it puts it at the top of the queue, flagged, and the doctor decides whether to escalate.
+ * Returns { flagged, redFlags, suggestedCtas, priority, priorityReasons, soap }.
+ */
 export async function runSummary(input) {
   const hits = scanInterview(input);
-  if (hits.length > 0) return escalated(hits);
-
   const systemPrompt = buildSummaryPrompt({
     complaintFlags: getComplaintFlags(input.complaint),
     history: input.history ?? null,
   });
   const ai = await askGemini(systemPrompt, summaryText(input), RESPONSE_SCHEMA, parseTriageResult);
 
-  // A case with no summary can't go to the doctor, so a person has to take over.
-  if (!ai) return escalated(['Summary unavailable: AI did not respond']);
-  if (ai.escalate) return escalated(ai.redFlags);
+  if (!ai) {
+    // No summary: the doctor still gets the full conversation, flagged so they look first.
+    const redFlags = [...hits, 'Summary unavailable: AI did not respond'];
+    return { flagged: true, redFlags, suggestedCtas: null, priority: 'high', priorityReasons: redFlags.map(flagReason), soap: EMPTY_SOAP };
+  }
 
-  // Keyword rules can only raise the AI's priority, never lower it.
-  const { priority, reasons } = computePriority({ ...input, aiPriority: ai.aiPriority, aiReason: ai.priorityReason });
-  return { escalate: false, redFlags: ai.redFlags, suggestedCtas: ai.suggestedCtas, priority, priorityReasons: reasons, soap: ai.soap };
+  const redFlags = [...new Set([...hits, ...ai.redFlags])];
+  const flagged = ai.escalate || redFlags.length > 0;
+  // Keyword rules can only raise the AI's priority, never lower it. A red flag always means high.
+  const { priority, reasons } = computePriority({ ...input, aiPriority: flagged ? 'high' : ai.aiPriority, aiReason: ai.priorityReason });
+  return {
+    flagged,
+    redFlags,
+    suggestedCtas: ai.suggestedCtas,
+    priority,
+    priorityReasons: [...redFlags.map(flagReason), ...reasons],
+    soap: ai.soap,
+  };
 }
+
+const flagReason = (flag) => `Red flag: ${flag}`;
