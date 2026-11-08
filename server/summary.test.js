@@ -55,6 +55,20 @@ describe('runSummary', () => {
     const result = await runSummary({ ...input, transcript: [{ question: 'On a scale of 1 to 10, how bad is the pain?', answer: '6' }] });
     assert.equal(result.painScore, 6);
   });
+  it('reads the pain score from the check-in questions', async () => {
+    stub(minor);
+    const result = await runSummary({ ...input, premadeAnswers: [{ question: 'How bad is it, on a scale of 1 to 10?', answer: '8' }] });
+    assert.equal(result.painScore, 8);
+  });
+  it('prefers a pain answer from the AI chat over the check-in one', async () => {
+    stub(minor);
+    const result = await runSummary({
+      ...input,
+      premadeAnswers: [{ question: 'How bad is it, on a scale of 1 to 10?', answer: '4' }],
+      transcript: [{ question: 'Out of 10, how bad is it now?', answer: '7' }],
+    });
+    assert.equal(result.painScore, 7);
+  });
   it('lets a keyword raise the AI priority', async () => {
     stub(minor);
     const result = await runSummary({ ...input, transcript: [{ question: 'Better or worse?', answer: 'getting worse' }] });

@@ -63,8 +63,9 @@ export async function runSummary(input) {
     history: input.history ?? null,
   });
   const ai = await askGemini(systemPrompt, summaryText(input), RESPONSE_SCHEMA, parseTriageResult);
-  // The patient's own 0 to 10 pain score, if asked. Breaks ties in the doctor queue.
-  const pain = painScore(input.transcript ?? []);
+  // The patient's own 0 to 10 pain score. Breaks ties in the doctor queue. The check-in questions
+  // ask it ("How bad is it, on a scale of 1 to 10?"); a later answer in the AI chat wins if there is one.
+  const pain = painScore([...(input.transcript ?? []), ...(input.premadeAnswers ?? [])]);
 
   if (!ai) {
     // No summary: the doctor still gets the full conversation, flagged so they look first.
